@@ -24,7 +24,10 @@ namespace Coem.Cmp.Core.Entities
         // Para EA, a veces el ID de facturación (Enrollment Number) es diferente al Tenant ID
         [MaxLength(100)]
         public string? BillingAccountId { get; set; }
-
+        
+        [Required]
+        [MaxLength(50)]
+        public string Country { get; set; } = "Colombia";
         public bool IsActive { get; set; } = true;
         public DateTime OnboardingDate { get; set; } = DateTime.UtcNow;
 

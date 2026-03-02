@@ -5,8 +5,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Client;
 using System.Net.Http.Headers;
 
-namespace Coem.Cmp.Web.Controllers
+namespace Coem.Cmp.Web.Areas.Admin.Controllers
 {
+    [Area("Admin")]
+    [Route("Admin/[controller]/[action]")]
     // El filtro de autorización global ya protege esto, pero la semántica es clave.
     public class TenantsController : Controller
     {

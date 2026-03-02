@@ -14,6 +14,7 @@ namespace Coem.Cmp.Infra.Data
         public DbSet<Tenant> Tenants { get; set; }
         public DbSet<CostRecord> CostRecords { get; set; }
         public DbSet<Subscription> Subscriptions { get; set; }
+        public DbSet<PartnerCenterCredential> PartnerCenterCredentials { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

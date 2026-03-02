@@ -64,7 +64,7 @@ namespace Coem.Cmp.Infra.Migrations
 
                     b.HasIndex("TenantId", "UsageDate");
 
-                    b.ToTable("CostRecords");
+                    b.ToTable("CostRecords", (string)null);
                 });
 
             modelBuilder.Entity("Coem.Cmp.Core.Entities.Subscription", b =>
@@ -102,7 +102,7 @@ namespace Coem.Cmp.Infra.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.ToTable("Subscriptions");
+                    b.ToTable("Subscriptions", (string)null);
                 });
 
             modelBuilder.Entity("Coem.Cmp.Core.Entities.Tenant", b =>
@@ -152,7 +152,7 @@ namespace Coem.Cmp.Infra.Migrations
                     b.HasIndex("MicrosoftTenantId")
                         .IsUnique();
 
-                    b.ToTable("Tenants");
+                    b.ToTable("Tenants", (string)null);
                 });
 
             modelBuilder.Entity("Coem.Cmp.Core.Entities.CostRecord", b =>
