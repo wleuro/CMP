@@ -1,0 +1,45 @@
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace Coem.Cmp.Core.Entities
+{
+    public class Tenant
+    {
+        public int Id { get; set; }
+
+        [Required]
+        public Guid MicrosoftTenantId { get; set; }
+
+        [Required]
+        [MaxLength(200)]
+        public string Name { get; set; }
+
+        [MaxLength(100)]
+        public string DefaultDomain { get; set; }
+
+        // El núcleo de la flexibilidad contractual
+        [Required]
+        [MaxLength(20)]
+        public string AgreementType { get; set; } = "CSP"; // Valores permitidos: "CSP", "EA", "MCA"
+
+        // Para EA, a veces el ID de facturación (Enrollment Number) es diferente al Tenant ID
+        [MaxLength(100)]
+        public string? BillingAccountId { get; set; }
+
+        public bool IsActive { get; set; } = true;
+        public DateTime OnboardingDate { get; set; } = DateTime.UtcNow;
+
+        public ICollection<CostRecord> CostRecords { get; set; }
+
+        // ¿Controles Empresariales le cobra el consumo a este cliente?
+        // true = Vas a Partner Center a traer sus costos.
+        // false = Vas por Azure Lighthouse directamente a su suscripción.
+        public bool IsBilledByCoem { get; set; } = true;
+
+        // Si el cliente es externo (IsBilledByCoem = false), necesitas el ID del directorio 
+        // donde vas a inyectar las políticas de Lighthouse.
+        public Guid? ExternalDirectoryId { get; set; }
+
+        // LA INYECCIÓN: Relación 1 a N con Subscriptions
+        public ICollection<Subscription> Subscriptions { get; set; } = new List<Subscription>();
+    }
+}

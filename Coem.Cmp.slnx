@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Coem.Cmp.Core/Coem.Cmp.Core.csproj" />
+  <Project Path="Coem.Cmp.Infra/Coem.Cmp.Infra.csproj" />
+  <Project Path="Coem.Cmp.Web/Coem.Cmp.Web.csproj" />
+  <Project Path="Coem.Cmp.Worker/Coem.Cmp.Worker.csproj" Id="9844b75d-bd18-4d09-bc8d-a4d243b649eb" />
+</Solution>

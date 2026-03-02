@@ -1,0 +1,20 @@
+﻿namespace Coem.Cmp.Core.Entities
+{
+    public class Subscription
+    {
+        public Guid Id { get; set; } // El ID real de la suscripción en Microsoft es un Guid
+
+        // EL ARREGLO ESTRICTO: Tiene que ser int para hacer match perfecto con Tenant.Id
+        public int TenantId { get; set; }
+
+        public string OfferId { get; set; } // DZH318Z0BPS6 (Azure Plan) o MS-AZR-0145P (Legacy)
+        public string OfferName { get; set; } // "Azure plan", "Microsoft Azure", "Office 365...", etc.
+        public string Status { get; set; } // active, suspended, deleted
+        public bool IsAzureWorkload { get; set; } // Tu bandera de oro para filtrar en la UI
+        public DateTime CreatedDate { get; set; }
+
+        // Navegación Entity Framework
+        public Tenant Tenant { get; set; }
+        public string Category { get; set; } // "AP", "AL" o "Colab"
+    }
+}
