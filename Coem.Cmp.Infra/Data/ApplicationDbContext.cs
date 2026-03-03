@@ -10,12 +10,15 @@ namespace Coem.Cmp.Infra.Data
         {
         }
 
+        // --- DOMINIO CSP (COEM NATIVO) ---
         public DbSet<Tenant> Tenants { get; set; }
         public DbSet<Subscription> Subscriptions { get; set; }
         public DbSet<PartnerCenterCredential> PartnerCenterCredentials { get; set; }
-
-        // El corazón del motor FinOps: Consumo diario detallado
         public DbSet<UsageRecord> UsageRecords { get; set; }
+
+        // --- DOMINIO BYOT (GESTIÓN EXTERNA / ARM DIRECT) ---
+        public DbSet<AzureDirectCredential> AzureDirectCredentials { get; set; }
+        public DbSet<ExternalSubscription> ExternalSubscriptions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -26,29 +29,43 @@ namespace Coem.Cmp.Infra.Data
                 .HasIndex(t => t.MicrosoftTenantId)
                 .IsUnique();
 
-            // 2. USAGE RECORDS: Optimización para analítica de alto nivel
+            // 2. USAGE RECORDS: Optimización FinOps
             modelBuilder.Entity<UsageRecord>(entity =>
             {
-                // Índice compuesto: Crucial para reportes rápidos por cliente y rango de tiempo
                 entity.HasIndex(e => new { e.TenantId, e.UsageDate });
-
-                // Índice simple: Para el Dashboard global de la región
                 entity.HasIndex(e => e.UsageDate);
-
-                // Precisión FinOps: 4 decimales evitan fugas financieras en el acumulado mensual
                 entity.Property(e => e.EstimatedCost).HasPrecision(18, 4);
                 entity.Property(e => e.Quantity).HasPrecision(18, 4);
 
-                // Relación explícita
                 entity.HasOne(e => e.Tenant)
-                      .WithMany() // O .WithMany(t => t.UsageRecords) si agregas la colección en la entidad Tenant
+                      .WithMany()
                       .HasForeignKey(e => e.TenantId)
                       .OnDelete(DeleteBehavior.Cascade);
             });
 
-            // 3. SUBSCRIPTIONS: Indexamos por ID para el Discovery de la Azure Function
+            // 3. SUBSCRIPTIONS (CSP): Indexamos por ID para Discovery
             modelBuilder.Entity<Subscription>()
                 .HasIndex(s => s.Id);
+
+            // 4. AZURE DIRECT CREDENTIALS (BYOT)
+            modelBuilder.Entity<AzureDirectCredential>()
+                .HasIndex(a => a.TenantId);
+
+            // 5. EXTERNAL SUBSCRIPTIONS (BYOT): Aislamiento Total
+            modelBuilder.Entity<ExternalSubscription>(entity =>
+            {
+                // Clave primaria es el GUID de Azure
+                entity.HasKey(e => e.Id);
+
+                // Relación con la credencial que tiene el acceso
+                entity.HasOne(e => e.Credential)
+                      .WithMany()
+                      .HasForeignKey(e => e.AzureDirectCredentialId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Índice para búsquedas rápidas por conector
+                entity.HasIndex(e => e.AzureDirectCredentialId);
+            });
         }
     }
 }

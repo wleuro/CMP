@@ -76,7 +76,7 @@
         color: #4b5563;
     }
 
-    /* Animación de Pulso para Estados Activos (Running) */
+    /* Animación de Pulso (Running) */
     .pulse-success {
         display: inline-block;
         width: 8px;
@@ -214,7 +214,14 @@
                                     {
                                         @foreach (var group in item.Subscriptions.GroupBy(s => s.Category))
                                         {
-                                            string catStyle = group.Key switch { "AP" => "background-color: #3b82f6; color: white;", "AL" => "background-color: #f97316; color: white;", "Colab" => "background-color: #eab308; color: #1f2937;", _ => "background-color: #9ca3af; color: white;" };
+                                            string catStyle = group.Key switch
+                                            {
+                                                "AP" => "background-color: #3b82f6; color: white;",
+                                                "AL" => "background-color: #f97316; color: white;",
+                                                "Colab" => "background-color: #eab308; color: #1f2937;",
+                                                                "INT" => "background-color: #8b5cf6; color: white;", // Púrpura para uso interno
+                                                _ => "background-color: #9ca3af; color: white;"
+                                                        };
 
                                             var subsJson = System.Text.Json.JsonSerializer.Serialize(group.Select(s => new
                                             {
@@ -240,7 +247,11 @@
     </div>
 </div>
 
-@* MODAL A: ADVERTENCIA SINCRONIZACIÓN TENANTS (RESTAURADO) *@
+@* ========================================= *@
+@* MODALES DE ADVERTENCIA (RESTAURADOS)      *@
+@* ========================================= *@
+
+@* MODAL 1: Sincronizar Identidades *@
 <div class="modal fade" id="syncIdentitiesModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
@@ -251,7 +262,7 @@
             <div class="modal-body">
                 <p class="mb-0">Estás a punto de iniciar un proceso de <strong>Sincronización de Identidades</strong> en toda la región configurada. ¿Deseas continuar?</p>
                 <div class="alert alert-warning mt-3 mb-0 py-2">
-                    <small>⚠️ <strong>Aviso:</strong> Esta acción puede tomar varios minutos y consumirá cuota de la API de Microsoft Partner Center [cite: 2026-03-02].</small>
+                    <small>⚠️ <strong>Aviso:</strong> Esta acción puede tomar varios minutos y consumirá cuota de la API de Microsoft Partner Center.</small>
                 </div>
             </div>
             <div class="modal-footer border-0 bg-light">
@@ -264,7 +275,7 @@
     </div>
 </div>
 
-@* MODAL B: ADVERTENCIA OBTENCIÓN SUSCRIPCIONES (RESTAURADO) *@
+@* MODAL 2: Obtener Suscripciones *@
 <div class="modal fade" id="syncSubscriptionsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
@@ -273,22 +284,22 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p class="mb-0">Se iniciará la obtención de <strong>Suscripciones</strong> actuales para determinar el perfil técnico de los clientes existentes [cite: 2026-03-02].</p>
+                <p class="mb-0">Se iniciará la obtención de <strong>Suscripciones</strong> actuales para determinar el perfil técnico de los clientes existentes.</p>
                 <div class="alert alert-warning mt-3 mb-0 py-2">
-                    <small>⚠️ <strong>Aviso:</strong> Esta acción puede tomar varios minutos y consumirá cuota de la API de Microsoft Partner Center [cite: 2026-03-02].</small>
+                    <small>⚠️ <strong>Aviso:</strong> Esta acción puede tomar varios minutos y consumirá cuota de la API de Microsoft Partner Center.</small>
                 </div>
             </div>
             <div class="modal-footer border-0">
                 <form action="/Admin/Tenants/SyncSubscriptions" method="post">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary fw-bold" onclick="this.innerHTML='Auditanado...'; this.disabled=true; this.form.submit();">Iniciar Auditoría</button>
+                    <button type="submit" class="btn btn-primary fw-bold" onclick="this.innerHTML='Auditoría en curso...'; this.disabled=true; this.form.submit();">Iniciar Auditoría</button>
                 </form>
             </div>
         </div>
     </div>
 </div>
 
-@* MODAL C: DETALLE TÉCNICO DE SUSCRIPCIONES *@
+@* MODAL 3: Detalle Técnico (Tu Motor de FinOps) *@
 <div class="modal fade" id="subDetailModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg">

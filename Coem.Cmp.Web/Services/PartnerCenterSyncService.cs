@@ -108,7 +108,6 @@ namespace Coem.Cmp.Web.Services
                     var authResult = await GetTokenAsync(config);
                     var client = CreateHttpClient(authResult.AccessToken);
 
-                    // Traemos todos los tenants de este país
                     var tenants = await _context.Tenants
                                         .Where(t => t.Country == config.CountryName)
                                         .ToListAsync();
@@ -131,28 +130,41 @@ namespace Coem.Cmp.Web.Services
                             var offerName = item.GetProperty("offerName").GetString();
                             var offerId = item.GetProperty("offerId").GetString();
                             var status = item.GetProperty("status").GetString();
-                            var effectiveDate = item.GetProperty("effectiveStartDate").GetDateTime();
 
-                            // Lógica de Categorización Zenith
+                            // Validamos que el JSON devuelva effectiveStartDate para evitar caídas
+                            DateTime? effectiveDate = null;
+                            if (item.TryGetProperty("effectiveStartDate", out var dateElement) && dateElement.ValueKind != JsonValueKind.Null)
+                            {
+                                effectiveDate = dateElement.GetDateTime();
+                            }
+
+                            // 1. LÓGICA DE CATEGORIZACIÓN (Incluyendo INT)
                             string categoryTag = "Colab";
                             if (offerName.Contains("Azure plan", StringComparison.OrdinalIgnoreCase) || offerId.Contains("DZH318Z0BPS6"))
+                            {
                                 categoryTag = "AP";
+                            }
+                            else if (offerName.Contains("Sponsorship", StringComparison.OrdinalIgnoreCase) || offerName.Contains("Pass", StringComparison.OrdinalIgnoreCase))
+                            {
+                                categoryTag = "INT"; // Marcar como interno/patrocinio
+                            }
                             else if (offerName.Contains("Microsoft Azure", StringComparison.OrdinalIgnoreCase) || offerId.Contains("MS-AZR-0145P"))
+                            {
                                 categoryTag = "AL";
+                            }
 
-                            // BUSCAMOS SI YA EXISTE (POR GUID) PARA ACTUALIZARLO
+                            // 2. LÓGICA UPSERT (Actualizar o Insertar)
                             var existingSub = await _context.Subscriptions.FirstOrDefaultAsync(s => s.Id == subId);
 
                             if (existingSub != null)
                             {
-                                // ACTUALIZACIÓN: Si ya existe, refrescamos el estado y la fecha de cambio
+                                // Refrescar estado y fechas
                                 existingSub.Status = status;
                                 existingSub.EffectiveDate = effectiveDate;
-                                existingSub.OfferName = offerName; // Por si cambió el SKU
+                                existingSub.OfferName = offerName;
                             }
                             else
                             {
-                                // INSERCIÓN: Nueva suscripción detectada
                                 _context.Subscriptions.Add(new Subscription
                                 {
                                     Id = subId,
@@ -167,9 +179,8 @@ namespace Coem.Cmp.Web.Services
                             }
                             processedCount++;
                         }
-                        // Guardamos por cada Tenant para no saturar la memoria
                         await _context.SaveChangesAsync();
-                        await Task.Delay(100); // Cortesía con la API de MS
+                        await Task.Delay(100);
                     }
                 }
                 catch (Exception ex)

@@ -1,0 +1,183 @@
+﻿@model IEnumerable<Coem.Cmp.Core.Entities.AzureDirectCredential>
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Conectores Externos (BYOT)";
+
+    // CORRECCIÓN: El diccionario ahora usa 'string' como llave porque convertimos el ID a string en el controlador
+    var syncedSubs = ViewBag.SyncedSubscriptions as Dictionary<string, List<Coem.Cmp.Core.Entities.ExternalSubscription>>;
+}
+
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0 fw-normal">Conectores Externos <span class="badge bg-secondary fs-6 align-middle">BYOT</span></h2>
+            <p class="text-muted mt-1 mb-0">Gestión de accesos para clientes EA, Patrocinios y CSPs administrados de terceros.</p>
+        </div>
+        <button type="button" class="btn btn-dark fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#newConnectorModal">
+            + Nuevo Conector
+        </button>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm border-0 rounded-3">
+            <strong>¡Éxito!</strong> @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0 rounded-3">
+            <strong>Atención:</strong> @TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="card shadow-sm border-0 rounded-3 overflow-hidden">
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="bg-light border-bottom border-2">
+                    <tr>
+                        <th class="py-3 px-4 border-0">Alias / Cliente</th>
+                        <th class="border-0 text-center">Tenant ID (Directorio)</th>
+                        <th class="border-0 text-center">Suscripciones (Lupa)</th>
+                        <th class="text-center border-0">Estado</th>
+                        <th class="text-end px-4 border-0">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr><td colspan="5" class="text-center py-5 text-muted">No hay conectores externos configurados.</td></tr>
+                    }
+                    @foreach (var item in Model)
+                    {
+                        // Buscamos en el diccionario usando el ID de la credencial como string
+                        var credIdKey = item.Id.ToString();
+                        var subs = syncedSubs != null && syncedSubs.ContainsKey(credIdKey) ? syncedSubs[credIdKey] : new List<Coem.Cmp.Core.Entities.ExternalSubscription>();
+
+                        // Serializamos los datos de la tabla AISLADA para el modal
+                        var subsJson = System.Text.Json.JsonSerializer.Serialize(subs.Select(s => new
+                        {
+                            id = s.Id.ToString(),
+                            name = s.Name,
+                            status = s.Status,
+                            audit = s.AuditResult // Usamos el campo nuevo de la tabla ExternalSubscription
+                        }));
+
+                        <tr style="border-bottom: 1px solid #f3f4f6;">
+                            <td class="fw-bold px-4 text-primary">@item.Alias</td>
+                            <td class="text-center"><small class="text-muted" style="font-family: monospace;">@item.TenantId</small></td>
+                            <td class="text-center">
+                                @if (subs.Any())
+                                {
+                                    <button class="btn btn-sm btn-primary px-3 shadow-sm fw-bold" onclick="openSubsModal('@item.Alias', @subsJson)">
+                                        🔍 Ver @subs.Count() Detectadas
+                                    </button>
+                                }
+                                else
+                                {
+                                    <div class="text-muted small">
+                                        <i class="bi bi-search"></i> Sin datos aún.<br />
+                                        <small class="text-uppercase text-primary fw-bold" style="font-size: 0.65rem;">Click en ⚡ Probar</small>
+                                    </div>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <span class="badge @(item.IsActive ? "bg-success" : "bg-danger")">
+                                    @(item.IsActive ? "Activo" : "Inactivo")
+                                </span>
+                            </td>
+                            <td class="text-end px-4">
+                                <div class="d-flex justify-content-end gap-2">
+                                    <button class="btn btn-sm btn-outline-secondary border-0" onclick="openEditModal(@item.Id, '@item.Alias', '@item.TenantId', '@item.ClientId')">✏️</button>
+
+                                    <form action="/Admin/ExternalTenants/TestConnection/@item.Id" method="post" class="m-0">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-sm btn-outline-primary border-0 fw-bold shadow-sm">⚡ Probar</button>
+                                    </form>
+
+                                    <form action="/Admin/ExternalTenants/Delete/@item.Id" method="post" class="m-0" onsubmit="return confirm('¿Eliminar acceso maestro?');">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-sm btn-outline-danger border-0">🗑️</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@* MODAL: DETALLE (LUPA) *@
+<div class="modal fade" id="subsDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-0 bg-light">
+                <h5 class="modal-title fw-bold" id="subsModalTitle">Detalle de Suscripciones Externas</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Nombre</th>
+                            <th>Subscription GUID</th>
+                            <th class="text-center">Estado Azure</th>
+                            <th class="text-center">Prueba Ácida (Roles)</th>
+                            <th class="text-end pe-4">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="subsModalBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ... MODALES DE NUEVO Y EDITAR SE MANTIENEN IGUAL ... *@
+
+@section Scripts {
+    <script>
+        function openEditModal(id, alias, tenantId, clientId) {
+            document.getElementById('editForm').action = '/Admin/ExternalTenants/Edit/' + id;
+            document.getElementById('editAlias').value = alias;
+            document.getElementById('editTenant').value = tenantId;
+            document.getElementById('editClient').value = clientId;
+            new bootstrap.Modal(document.getElementById('editConnectorModal')).show();
+        }
+
+        function openSubsModal(alias, subs) {
+            document.getElementById('subsModalTitle').innerHTML = `Inventario Externo: <span class="text-primary">${alias}</span>`;
+            let html = '';
+            subs.forEach(s => {
+                // Parseamos la auditoría que viene en el campo audit (AuditResult de la tabla aislada)
+                let costOk = s.audit && s.audit.includes('Cost:OK');
+                let readOk = s.audit && (s.audit.includes('Read:OK') || s.audit.includes('Reader:OK'));
+
+                let auditHtml = `
+                    <span class="badge ${costOk ? 'bg-success' : 'bg-danger'} me-1 shadow-sm">💰 Costos: ${costOk ? 'OK' : 'FAIL'}</span>
+                    <span class="badge ${readOk ? 'bg-success' : 'bg-danger'} shadow-sm">⚙️ Recursos: ${readOk ? 'OK' : 'FAIL'}</span>
+                `;
+
+                html += `
+                    <tr>
+                        <td class="ps-4 fw-bold text-dark">${s.name}</td>
+                        <td><small class="text-muted" style="font-family:monospace">${s.id}</small></td>
+                        <td class="text-center"><span class="badge bg-light text-dark border">${s.status}</span></td>
+                        <td class="text-center">${auditHtml}</td>
+                        <td class="text-end pe-4">
+                            <form action="/Admin/ExternalTenants/RemoveSubscription/${s.id}" method="post" onsubmit="return confirm('¿Ocultar esta suscripción del radar?');">
+                                <input name="__RequestVerificationToken" type="hidden" value="${document.querySelector('input[name="__RequestVerificationToken"]').value}" />
+                                <button type="submit" class="btn btn-sm btn-link text-danger p-0 text-decoration-none">🗑️ Quitar</button>
+                            </form>
+                        </td>
+                    </tr>`;
+            });
+            document.getElementById('subsModalBody').innerHTML = html;
+            new bootstrap.Modal(document.getElementById('subsDetailModal')).show();
+        }
+    </script>
+}

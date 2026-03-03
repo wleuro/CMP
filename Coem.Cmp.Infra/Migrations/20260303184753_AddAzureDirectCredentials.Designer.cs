@@ -4,6 +4,7 @@ using Coem.Cmp.Infra.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Coem.Cmp.Infra.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260303184753_AddAzureDirectCredentials")]
+    partial class AddAzureDirectCredentials
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -102,37 +105,6 @@ namespace Coem.Cmp.Infra.Migrations
                     b.HasIndex("TenantId");
 
                     b.ToTable("CostRecord");
-                });
-
-            modelBuilder.Entity("Coem.Cmp.Core.Entities.ExternalSubscription", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("AuditResult")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("AzureDirectCredentialId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("LastSync")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AzureDirectCredentialId");
-
-                    b.ToTable("ExternalSubscriptions");
                 });
 
             modelBuilder.Entity("Coem.Cmp.Core.Entities.PartnerCenterCredential", b =>
@@ -342,17 +314,6 @@ namespace Coem.Cmp.Infra.Migrations
                         .IsRequired();
 
                     b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Coem.Cmp.Core.Entities.ExternalSubscription", b =>
-                {
-                    b.HasOne("Coem.Cmp.Core.Entities.AzureDirectCredential", "Credential")
-                        .WithMany()
-                        .HasForeignKey("AzureDirectCredentialId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Credential");
                 });
 
             modelBuilder.Entity("Coem.Cmp.Core.Entities.Subscription", b =>

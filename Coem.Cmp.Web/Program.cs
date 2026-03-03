@@ -1,13 +1,14 @@
+using Azure.Identity; // Requerido para Key Vault
+using Coem.Cmp.Infra.Data; // Tu contexto de datos (ajusta el namespace si es diferente)
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Authorization;
+using Microsoft.EntityFrameworkCore; // Requerido para SQL
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
-using Azure.Identity; // Requerido para Key Vault
-using Microsoft.EntityFrameworkCore; // Requerido para SQL
-using Coem.Cmp.Infra.Data; // Tu contexto de datos (ajusta el namespace si es diferente)
+using Coem.Cmp.Web.Services;
 
-var builder = WebApplication.CreateBuilder(args); // Corregido: Faltaba el punto y coma
+var builder = WebApplication.CreateBuilder(args);
 
 // =========================================================================
 // 1. GOBERNANZA DE SECRETOS (EVIDENCIA CONTROL 3B.2.5)
@@ -55,8 +56,15 @@ builder.Services.AddRazorPages()
     .AddMicrosoftIdentityUI();
 
 builder.Services.AddHttpClient(); // Vital para no agotar los sockets del servidor
-builder.Services.AddScoped<Coem.Cmp.Web.Services.IPartnerCenterSyncService, Coem.Cmp.Web.Services.PartnerCenterSyncService>();
 
+// =========================================================================
+// *** REGISTRO DE MOTORES FINOPS (DEBEN IR ANTES DEL BUILD) ***
+// =========================================================================
+builder.Services.AddScoped<IPartnerCenterSyncService, PartnerCenterSyncService>();
+// Motor exclusivo para clientes Directos y EA
+builder.Services.AddScoped<IAzureDirectBillingService, AzureDirectBillingService>();
+
+// ¡NADA DE builder.Services DESPUÉS DE ESTA LÍNEA!
 var app = builder.Build();
 
 // =========================================================================
