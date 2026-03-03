@@ -1,0 +1,268 @@
+﻿@model IEnumerable<Coem.Cmp.Core.Entities.PartnerCenterCredential>
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Gestión de Credenciales";
+}
+
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0 fw-normal">Conexiones Partner Center Regional</h2>
+        <button class="btn btn-success fw-bold shadow-sm" onclick="openModal()">+ Agregar Subsidiaria</button>
+    </div>
+
+    @if (TempData["Message"] != null)
+    {
+        <div class="alert alert-success d-flex justify-content-between align-items-center shadow-sm border-0 rounded-3 mb-4" style="background-color: #d1fae5; color: #065f46;">
+            <div>
+                <strong class="me-1">¡Sistema Actualizado!</strong> @TempData["Message"]
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <div class="card shadow-sm border-0 rounded-3 overflow-hidden">
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="bg-white border-bottom border-2">
+                    <tr>
+                        <th class="py-3 px-4 fw-bold border-0 text-dark">País / Región</th>
+                        <th class="fw-bold border-0 text-dark">MPN ID</th>
+                        <th class="fw-bold border-0 text-dark">Tenant ID Microsoft</th>
+                        <th class="fw-bold border-0 text-dark">App Client ID</th>
+                        <th class="text-center fw-bold border-0 text-dark">Estado</th>
+                        <th class="text-end fw-bold border-0 text-dark px-4">Acciones Tácticas</th>
+                    </tr>
+                </thead>
+                <tbody class="border-top-0">
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">No hay bóvedas regionales configuradas. Agrega una conexión para empezar.</td>
+                        </tr>
+                    }
+                    @foreach (var item in Model)
+                    {
+                        <tr style="border-bottom: 1px solid #f3f4f6;">
+                            <td class="fw-bold px-4" style="color: #1f2937;">@item.CountryName</td>
+                            <td class="text-muted">@item.MpnId</td>
+                            <td><small class="text-muted" style="font-family: monospace;">@item.TenantId</small></td>
+                            <td><small class="text-muted" style="font-family: monospace;">@item.ClientId</small></td>
+                            <td class="text-center">
+                                @if (item.IsActive)
+                                {
+                                    <span class="badge border border-success text-success bg-transparent px-3 py-1 rounded-1 shadow-sm">Activo</span>
+                                }
+                                else
+                                {
+                                    <span class="badge border border-danger text-danger bg-transparent px-3 py-1 rounded-1 shadow-sm">Inactivo</span>
+                                }
+                            </td>
+                            <td class="text-end px-4">
+                                <button onclick="testConnection(@item.Id, this)" class="btn btn-sm btn-outline-primary fw-bold shadow-sm me-1">Probar API</button>
+                                <button onclick="editCredential(@item.Id)" class="btn btn-sm btn-outline-secondary fw-bold shadow-sm me-1">Editar</button>
+                                <button onclick="promptDelete(@item.Id, '@item.CountryName')" class="btn btn-sm btn-outline-danger fw-bold shadow-sm">Eliminar</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="credentialModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light border-0">
+                <h5 class="modal-title fw-bold text-dark" id="modalTitle">Configuración de Subsidiaria</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="/Admin/Countries/Save" method="post">
+                <div class="modal-body">
+                    <input type="hidden" id="Id" name="Id" value="0" />
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold text-muted">País (Ej. Perú)</label>
+                            <input type="text" id="CountryName" name="CountryName" class="form-control border-secondary shadow-sm" required />
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold text-muted">MPN ID</label>
+                            <input type="text" id="MpnId" name="MpnId" class="form-control border-secondary shadow-sm" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-muted">Tenant ID</label>
+                        <input type="text" id="TenantId" name="TenantId" class="form-control border-secondary shadow-sm" required />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-muted">Client ID (App Registration)</label>
+                        <input type="text" id="ClientId" name="ClientId" class="form-control border-secondary shadow-sm" required />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-muted">Client Secret</label>
+                        <input type="password" id="ClientSecret" name="ClientSecret" class="form-control border-secondary shadow-sm" placeholder="Dejar en blanco para no modificar" />
+                        <small class="text-danger mt-1" id="secretHelp">Obligatorio al crear una nueva conexión.</small>
+                    </div>
+
+                    <div class="form-check form-switch mt-4">
+                        <input type="hidden" id="IsActive" name="IsActive" value="true" />
+                        <input class="form-check-input" type="checkbox" id="IsActiveToggle" checked>
+                        <label class="form-check-label fw-bold" for="IsActiveToggle">Sincronización Activa</label>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary fw-bold px-4">Guardar Configuración</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow" style="border-top: 4px solid #dc2626 !important;">
+            <div class="modal-header bg-white border-0">
+                <h5 class="modal-title fw-bold text-danger">⚠️ Advertencia Crítica</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Estás a punto de eliminar permanentemente la conexión con <strong id="deleteCountryName" class="text-danger fs-5"></strong>.</p>
+                <p class="text-muted mb-0">Esta acción cortará la sincronización regional. Los clientes existentes en la base de datos no se borrarán, pero dejarán de actualizarse. ¿Estás absolutamente seguro?</p>
+            </div>
+            <div class="modal-footer border-0 bg-light">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger fw-bold" id="confirmDeleteBtn" onclick="executeDelete()">Sí, Eliminar Conexión</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1055">
+    <div id="connectionToast" class="toast align-items-center text-white border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body fw-bold" id="toastMessage"></div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let credentialModal;
+        let deleteModal;
+        let connectionToast;
+        let countryIdToDelete = 0;
+
+        document.addEventListener("DOMContentLoaded", function () {
+            credentialModal = new bootstrap.Modal(document.getElementById('credentialModal'));
+            deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+            connectionToast = new bootstrap.Toast(document.getElementById('connectionToast'));
+
+            document.getElementById('IsActiveToggle').addEventListener('change', function (e) {
+                document.getElementById('IsActive').value = e.target.checked ? "true" : "false";
+            });
+        });
+
+        function showToast(message, isSuccess) {
+            const toastEl = document.getElementById('connectionToast');
+            document.getElementById('toastMessage').innerText = message;
+
+            if (isSuccess) {
+                toastEl.style.backgroundColor = '#059669'; // Verde elegante
+            } else {
+                toastEl.style.backgroundColor = '#dc2626'; // Rojo elegante
+            }
+            connectionToast.show();
+        }
+
+        function openModal() {
+            document.getElementById('modalTitle').innerText = "Nueva Subsidiaria";
+            document.getElementById('Id').value = "0";
+            document.getElementById('CountryName').value = "";
+            document.getElementById('MpnId').value = "";
+            document.getElementById('TenantId').value = "";
+            document.getElementById('ClientId').value = "";
+            document.getElementById('ClientSecret').value = "";
+            document.getElementById('ClientSecret').required = true;
+            document.getElementById('secretHelp').style.display = 'block';
+
+            document.getElementById('IsActiveToggle').checked = true;
+            document.getElementById('IsActive').value = "true";
+
+            credentialModal.show();
+        }
+
+        async function editCredential(id) {
+            document.getElementById('modalTitle').innerText = "Modificar Subsidiaria";
+
+            const response = await fetch(`/Admin/Countries/Get/${id}`);
+            const data = await response.json();
+
+            document.getElementById('Id').value = data.id;
+            document.getElementById('CountryName').value = data.countryName;
+            document.getElementById('MpnId').value = data.mpnId;
+            document.getElementById('TenantId').value = data.tenantId;
+            document.getElementById('ClientId').value = data.clientId;
+
+            document.getElementById('ClientSecret').value = "";
+            document.getElementById('ClientSecret').required = false;
+            document.getElementById('secretHelp').style.display = 'none';
+
+            document.getElementById('IsActiveToggle').checked = data.isActive;
+            document.getElementById('IsActive').value = data.isActive ? "true" : "false";
+
+            credentialModal.show();
+        }
+
+        async function testConnection(id, btn) {
+            const originalText = btn.innerText;
+            btn.innerText = "Auditando...";
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`/Admin/Countries/TestConnection/${id}`, { method: 'POST' });
+                const data = await response.json();
+                showToast(data.message, data.success);
+            } catch (err) {
+                showToast("Error crítico de red. El servidor no responde.", false);
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        function promptDelete(id, countryName) {
+            countryIdToDelete = id;
+            document.getElementById('deleteCountryName').innerText = countryName;
+            document.getElementById('confirmDeleteBtn').disabled = false;
+            document.getElementById('confirmDeleteBtn').innerText = "Sí, Eliminar Conexión";
+            deleteModal.show();
+        }
+
+        async function executeDelete() {
+            const btn = document.getElementById('confirmDeleteBtn');
+            btn.innerText = "Eliminando...";
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`/Admin/Countries/Delete/${countryIdToDelete}`, { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    deleteModal.hide();
+                    showToast(data.message, false);
+                }
+            } catch (err) {
+                deleteModal.hide();
+                showToast("Error crítico al intentar eliminar.", false);
+            }
+        }
+    </script>
+}

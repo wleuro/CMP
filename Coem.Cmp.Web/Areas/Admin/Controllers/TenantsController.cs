@@ -4,36 +4,85 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Client;
 using System.Net.Http.Headers;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace Coem.Cmp.Web.Areas.Admin.Controllers
 {
     [Area("Admin")]
-    [Route("Admin/[controller]/[action]")]
-    // El filtro de autorización global ya protege esto, pero la semántica es clave.
+    [Route("Admin/Tenants")]
     public class TenantsController : Controller
     {
         private readonly ApplicationDbContext _context;
         private readonly IPartnerCenterSyncService _syncService;
+        private readonly IDataProtector _protector;
 
-        public TenantsController(ApplicationDbContext context, IPartnerCenterSyncService syncService)
+        public TenantsController(ApplicationDbContext context, IPartnerCenterSyncService syncService, IDataProtectionProvider dataProtectionProvider)
         {
             _context = context;
             _syncService = syncService;
+            _protector = dataProtectionProvider.CreateProtector("Coem.Cmp.RegionalSecrets.v1");
         }
 
-        public async Task<IActionResult> Index()
+        // =========================================================================
+        // RADAR REGIONAL EVOLUCIONADO (Con Filtro por KPI de Consumo)
+        // =========================================================================
+        [HttpGet("")]
+        public async Task<IActionResult> Index(string countryFilter, string searchQuery, string categoryFilter)
         {
-            // AsNoTracking porque solo vamos a leer datos, no a modificarlos aquí.
-            // EL CAMBIO ESTRATÉGICO: Incluimos las suscripciones para que la vista sepa quién es de Azure.
-            var tenants = await _context.Tenants
-                .Include(t => t.Subscriptions)
-                .AsNoTracking()
+            var availableCountries = await _context.PartnerCenterCredentials
+                .Where(c => c.IsActive)
+                .Select(c => c.CountryName)
+                .Distinct()
                 .ToListAsync();
+
+            ViewBag.Countries = availableCountries;
+            ViewBag.CurrentFilter = countryFilter;
+            ViewBag.SearchQuery = searchQuery;
+            ViewBag.CategoryFilter = categoryFilter; // NUEVO: Rastreamos qué KPI clickeó el usuario
+
+            var query = _context.Tenants.Include(t => t.Subscriptions).AsQueryable();
+
+            // 1. Aplicamos los filtros básicos primero (País y Texto)
+            if (!string.IsNullOrEmpty(countryFilter))
+            {
+                query = query.Where(t => t.Country == countryFilter);
+            }
+
+            if (!string.IsNullOrEmpty(searchQuery))
+            {
+                query = query.Where(t =>
+                    t.Name.Contains(searchQuery) ||
+                    t.DefaultDomain.Contains(searchQuery) ||
+                    t.MicrosoftTenantId.ToString().Contains(searchQuery));
+            }
+
+            // 2. CÁLCULOS TÁCTICOS: Calculamos los números de los KPIs ANTES de filtrar por categoría
+            // (Esto asegura que los cuadros mantengan sus totales aunque apliques el filtro)
+            var allFiltered = await query.ToListAsync();
+            ViewBag.TotalAP = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "AP"));
+            ViewBag.TotalAL = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "AL") && !t.Subscriptions.Any(s => s.Category == "AP"));
+            ViewBag.TotalColab = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "Colab") && !t.Subscriptions.Any(s => s.Category == "AP" || s.Category == "AL"));
+            ViewBag.EnRevision = allFiltered.Count(t => !t.Subscriptions.Any());
+
+            // 3. FILTRO POR KPI (El clic en los botones de colores)
+            if (!string.IsNullOrEmpty(categoryFilter))
+            {
+                if (categoryFilter == "AP")
+                    query = query.Where(t => t.Subscriptions.Any(s => s.Category == "AP"));
+                else if (categoryFilter == "AL")
+                    query = query.Where(t => t.Subscriptions.Any(s => s.Category == "AL") && !t.Subscriptions.Any(s => s.Category == "AP"));
+                else if (categoryFilter == "Colab")
+                    query = query.Where(t => t.Subscriptions.Any(s => s.Category == "Colab") && !t.Subscriptions.Any(s => s.Category == "AP" || s.Category == "AL"));
+                else if (categoryFilter == "None")
+                    query = query.Where(t => !t.Subscriptions.Any());
+            }
+
+            var tenants = await query.OrderByDescending(t => t.OnboardingDate).AsNoTracking().ToListAsync();
 
             return View(tenants);
         }
 
-        [HttpPost]
+        [HttpPost("Sync")]
         public async Task<IActionResult> Sync()
         {
             try
@@ -43,17 +92,12 @@ namespace Coem.Cmp.Web.Areas.Admin.Controllers
             }
             catch (Exception ex)
             {
-                // Un verdadero CMP maneja sus errores, no explota en la cara del usuario.
                 TempData["ErrorMessage"] = $"Error sincronizando clientes: {ex.Message}";
             }
-
             return RedirectToAction(nameof(Index));
         }
 
-        // =========================================================================
-        // NUEVO ENDPOINT: El gatillo del Radar de Suscripciones
-        // =========================================================================
-        [HttpPost]
+        [HttpPost("SyncSubscriptions")]
         public async Task<IActionResult> SyncSubscriptions()
         {
             try
@@ -65,24 +109,23 @@ namespace Coem.Cmp.Web.Areas.Admin.Controllers
             {
                 TempData["ErrorMessage"] = $"Error auditando suscripciones: {ex.Message}";
             }
-
             return RedirectToAction(nameof(Index));
         }
-        // =========================================================================
-        // SCRIPT DE RECONOCIMIENTO: Prueba de Fuego Financiera
-        // =========================================================================
-        [HttpGet]
-        public async Task<IActionResult> TestBillingAccess([FromServices] IConfiguration config)
+
+        // Script residual de prueba financiera (Opcional mantenerlo aquí ya que ahora vive mejor en CountriesController, pero lo dejamos para no romperte nada extra)
+        [HttpGet("TestBillingAccess/{countryId}")]
+        public async Task<IActionResult> TestBillingAccess(int countryId)
         {
             try
             {
-                var tenantId = config["PartnerCenter:TenantId"];
-                var clientId = config["PartnerCenter:ClientId"];
-                var clientSecret = config["PartnerCenter:ClientSecret"];
+                var cred = await _context.PartnerCenterCredentials.FindAsync(countryId);
+                if (cred == null) return Content("ERROR: País no encontrado en la bóveda.", "text/plain");
 
-                var app = ConfidentialClientApplicationBuilder.Create(clientId)
-                    .WithClientSecret(clientSecret)
-                    .WithAuthority(new Uri($"https://login.microsoftonline.com/{tenantId}"))
+                var plainTextSecret = _protector.Unprotect(cred.ClientSecret);
+
+                var app = ConfidentialClientApplicationBuilder.Create(cred.ClientId)
+                    .WithClientSecret(plainTextSecret)
+                    .WithAuthority(new Uri($"https://login.microsoftonline.com/{cred.TenantId}"))
                     .Build();
 
                 string[] scopes = new string[] { "https://api.partnercenter.microsoft.com/.default" };
@@ -91,17 +134,16 @@ namespace Coem.Cmp.Web.Areas.Admin.Controllers
                 using var client = new HttpClient();
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authResult.AccessToken);
 
-                // El endpoint que separa a los administradores de los espectadores
                 var response = await client.GetAsync("https://api.partnercenter.microsoft.com/v1/invoices");
 
                 if (response.IsSuccessStatusCode)
                 {
-                    return Content("ÉXITO TÁCTICO: La App tiene el rol de Admin Agent. Tienes las llaves de la bóveda financiera.", "text/plain");
+                    return Content($"ÉXITO TÁCTICO en {cred.CountryName}: La App tiene el rol de Admin Agent.", "text/plain");
                 }
                 else
                 {
                     var error = await response.Content.ReadAsStringAsync();
-                    return Content($"ACCESO DENEGADO ({(int)response.StatusCode}): Sebastián no asignó los permisos. La App está ciega.\nDetalle de Microsoft: {error}", "text/plain");
+                    return Content($"ACCESO DENEGADO en {cred.CountryName} ({(int)response.StatusCode}).", "text/plain");
                 }
             }
             catch (Exception ex)
@@ -109,7 +151,5 @@ namespace Coem.Cmp.Web.Areas.Admin.Controllers
                 return Content($"ERROR DE INFRAESTRUCTURA: {ex.Message}", "text/plain");
             }
         }
-
-
     }
 }

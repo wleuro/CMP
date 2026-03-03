@@ -1,0 +1,54 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Projects\\Sync\\CMP\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|c:\\projects\\sync\\cmp\\coem.cmp.web\\areas\\admin\\credentials\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|solutionrelative:coem.cmp.web\\areas\\admin\\credentials\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|c:\\projects\\sync\\cmp\\coem.cmp.web\\areas\\admin\\controllers\\partnercentercredentialscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|solutionrelative:coem.cmp.web\\areas\\admin\\controllers\\partnercentercredentialscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "Index.cshtml",
+              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Areas\\Admin\\Credentials\\Index.cshtml",
+              "RelativeDocumentMoniker": "Coem.Cmp.Web\\Areas\\Admin\\Credentials\\Index.cshtml",
+              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Areas\\Admin\\Credentials\\Index.cshtml",
+              "RelativeToolTip": "Coem.Cmp.Web\\Areas\\Admin\\Credentials\\Index.cshtml",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
+              "WhenOpened": "2026-03-02T20:49:05.607Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "PartnerCenterCredentialsController.cs",
+              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Areas\\Admin\\Controllers\\PartnerCenterCredentialsController.cs",
+              "RelativeDocumentMoniker": "Coem.Cmp.Web\\Areas\\Admin\\Controllers\\PartnerCenterCredentialsController.cs",
+              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Areas\\Admin\\Controllers\\PartnerCenterCredentialsController.cs",
+              "RelativeToolTip": "Coem.Cmp.Web\\Areas\\Admin\\Controllers\\PartnerCenterCredentialsController.cs",
+              "ViewState": "AgIAAD0AAAAAAAAAAAAqwGAAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-03-02T20:46:23.187Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

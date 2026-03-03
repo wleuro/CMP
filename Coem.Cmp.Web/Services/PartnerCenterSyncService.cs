@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Client;
 using Coem.Cmp.Infra.Data;
 using Coem.Cmp.Core.Entities;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace Coem.Cmp.Web.Services
 {
@@ -17,28 +18,32 @@ namespace Coem.Cmp.Web.Services
     {
         private readonly ApplicationDbContext _context;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IDataProtector _protector;
 
-        public PartnerCenterSyncService(ApplicationDbContext context, IHttpClientFactory httpClientFactory)
+        public PartnerCenterSyncService(ApplicationDbContext context, IHttpClientFactory httpClientFactory, IDataProtectionProvider dataProtectionProvider)
         {
             _context = context;
             _httpClientFactory = httpClientFactory;
+            _protector = dataProtectionProvider.CreateProtector("Coem.Cmp.RegionalSecrets.v1");
         }
 
         public async Task<int> SyncCustomersAsync()
         {
-            // 1. Obtenemos todas las credenciales regionales activas (Panel de Control)
             var regionalConfigs = await _context.PartnerCenterCredentials.Where(c => c.IsActive).ToListAsync();
+
+            if (!regionalConfigs.Any())
+            {
+                throw new InvalidOperationException("Bóveda Regional vacía. Configura un país antes de sincronizar.");
+            }
+
             int totalSynced = 0;
 
             foreach (var config in regionalConfigs)
             {
-                Console.WriteLine($"[REGION] Iniciando carga de clientes para: {config.CountryName}");
-
                 try
                 {
                     var authResult = await GetTokenAsync(config);
                     var client = CreateHttpClient(authResult.AccessToken);
-
                     string currentUrl = "https://api.partnercenter.microsoft.com/v1/customers";
 
                     do
@@ -65,7 +70,7 @@ namespace Coem.Cmp.Web.Services
                                     Name = companyName,
                                     DefaultDomain = domain,
                                     AgreementType = "CSP",
-                                    Country = config.CountryName, // TAG REGIONAL
+                                    Country = config.CountryName,
                                     IsBilledByCoem = true,
                                     IsActive = true,
                                     OnboardingDate = DateTime.UtcNow
@@ -73,7 +78,6 @@ namespace Coem.Cmp.Web.Services
                             }
                             totalSynced++;
                         }
-
                         await _context.SaveChangesAsync();
 
                         currentUrl = null;
@@ -86,7 +90,7 @@ namespace Coem.Cmp.Web.Services
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR REGIONAL] Fallo en {config.CountryName}: {ex.Message}");
+                    Console.WriteLine($"[ERROR REGIONAL] {config.CountryName}: {ex.Message}");
                 }
             }
             return totalSynced;
@@ -95,36 +99,26 @@ namespace Coem.Cmp.Web.Services
         public async Task<int> SyncSubscriptionsAsync()
         {
             var regionalConfigs = await _context.PartnerCenterCredentials.Where(c => c.IsActive).ToListAsync();
-            int totalSubscriptions = 0;
+            int processedCount = 0;
 
             foreach (var config in regionalConfigs)
             {
-                Console.WriteLine($"[REGION] Auditando suscripciones de: {config.CountryName}");
-
-                var authResult = await GetTokenAsync(config);
-                var client = CreateHttpClient(authResult.AccessToken);
-
-                // Traemos solo los clientes que pertenecen a este país
-                var tenants = await _context.Tenants
-                                    .Where(t => t.AgreementType == "CSP" && t.Country == config.CountryName)
-                                    .ToListAsync();
-
-                foreach (var tenant in tenants)
+                try
                 {
-                    bool yaAuditado = await _context.Subscriptions.AnyAsync(s => s.TenantId == tenant.Id);
-                    if (yaAuditado) continue;
+                    var authResult = await GetTokenAsync(config);
+                    var client = CreateHttpClient(authResult.AccessToken);
 
-                    string url = $"https://api.partnercenter.microsoft.com/v1/customers/{tenant.MicrosoftTenantId}/subscriptions";
+                    // Traemos todos los tenants de este país
+                    var tenants = await _context.Tenants
+                                        .Where(t => t.Country == config.CountryName)
+                                        .ToListAsync();
 
-                    try
+                    foreach (var tenant in tenants)
                     {
+                        string url = $"https://api.partnercenter.microsoft.com/v1/customers/{tenant.MicrosoftTenantId}/subscriptions";
+
                         var response = await client.GetAsync(url);
-                        if (!response.IsSuccessStatusCode)
-                        {
-                            var errorMsg = await response.Content.ReadAsStringAsync();
-                            Console.WriteLine($"[AVISO] {tenant.Name} ({config.CountryName}): {response.StatusCode}");
-                            continue;
-                        }
+                        if (!response.IsSuccessStatusCode) continue;
 
                         var content = await response.Content.ReadAsStringAsync();
                         var pcData = JsonDocument.Parse(content);
@@ -136,42 +130,61 @@ namespace Coem.Cmp.Web.Services
                             var subId = Guid.Parse(item.GetProperty("id").GetString());
                             var offerName = item.GetProperty("offerName").GetString();
                             var offerId = item.GetProperty("offerId").GetString();
+                            var status = item.GetProperty("status").GetString();
+                            var effectiveDate = item.GetProperty("effectiveStartDate").GetDateTime();
 
+                            // Lógica de Categorización Zenith
                             string categoryTag = "Colab";
                             if (offerName.Contains("Azure plan", StringComparison.OrdinalIgnoreCase) || offerId.Contains("DZH318Z0BPS6"))
                                 categoryTag = "AP";
                             else if (offerName.Contains("Microsoft Azure", StringComparison.OrdinalIgnoreCase) || offerId.Contains("MS-AZR-0145P"))
                                 categoryTag = "AL";
 
-                            _context.Subscriptions.Add(new Subscription
+                            // BUSCAMOS SI YA EXISTE (POR GUID) PARA ACTUALIZARLO
+                            var existingSub = await _context.Subscriptions.FirstOrDefaultAsync(s => s.Id == subId);
+
+                            if (existingSub != null)
                             {
-                                Id = subId,
-                                TenantId = tenant.Id,
-                                OfferId = offerId,
-                                OfferName = offerName,
-                                Category = categoryTag,
-                                CreatedDate = item.GetProperty("creationDate").GetDateTime(),
-                                Status = item.GetProperty("status").GetString()
-                            });
-                            totalSubscriptions++;
+                                // ACTUALIZACIÓN: Si ya existe, refrescamos el estado y la fecha de cambio
+                                existingSub.Status = status;
+                                existingSub.EffectiveDate = effectiveDate;
+                                existingSub.OfferName = offerName; // Por si cambió el SKU
+                            }
+                            else
+                            {
+                                // INSERCIÓN: Nueva suscripción detectada
+                                _context.Subscriptions.Add(new Subscription
+                                {
+                                    Id = subId,
+                                    TenantId = tenant.Id,
+                                    OfferId = offerId,
+                                    OfferName = offerName,
+                                    Category = categoryTag,
+                                    CreatedDate = item.GetProperty("creationDate").GetDateTime(),
+                                    EffectiveDate = effectiveDate,
+                                    Status = status
+                                });
+                            }
+                            processedCount++;
                         }
+                        // Guardamos por cada Tenant para no saturar la memoria
                         await _context.SaveChangesAsync();
-                        await Task.Delay(200);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[ERROR CRITICO] {tenant.Name}: {ex.Message}");
+                        await Task.Delay(100); // Cortesía con la API de MS
                     }
                 }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ERROR SYNC] {config.CountryName}: {ex.Message}");
+                }
             }
-            return totalSubscriptions;
+            return processedCount;
         }
 
-        // MÉTODOS PRIVADOS DE APOYO (DRY)
         private async Task<AuthenticationResult> GetTokenAsync(PartnerCenterCredential config)
         {
+            var plainTextSecret = _protector.Unprotect(config.ClientSecret);
             var app = ConfidentialClientApplicationBuilder.Create(config.ClientId)
-                .WithClientSecret(config.ClientSecret)
+                .WithClientSecret(plainTextSecret)
                 .WithAuthority(new Uri($"https://login.microsoftonline.com/{config.TenantId}"))
                 .Build();
 

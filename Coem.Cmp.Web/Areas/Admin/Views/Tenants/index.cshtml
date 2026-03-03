@@ -1,173 +1,238 @@
 ﻿@model IEnumerable<Coem.Cmp.Core.Entities.Tenant>
-
 @{
-    ViewData["Title"] = "Gestión de Clientes CSP";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Gestión de Tenants";
+
+    var countries = ViewBag.Countries as List<string>;
+    var currentFilter = ViewBag.CurrentFilter as string;
+    var searchQuery = ViewBag.SearchQuery as string;
+    var categoryFilter = ViewBag.CategoryFilter as string;
 }
 
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Clientes Activos (CSP)</h2>
-
-        <div class="flex-grow-1 mx-4">
-            <input type="text" id="searchInput" class="form-control form-control-lg shadow-sm border-secondary" placeholder="Buscar por cliente, dominio o Tenant ID..." autocomplete="off">
-        </div>
-
-        <div>
-            <form asp-action="Sync" method="post" class="d-inline me-2">
-                <button type="submit" class="btn btn-outline-secondary shadow-sm">
-                    1. Identidades
-                </button>
-            </form>
-
-            <form asp-action="SyncSubscriptions" method="post" class="d-inline">
-                <button type="submit" class="btn btn-primary shadow-sm" onclick="return confirm('Esta operación tomará varios minutos para auditar todos los clientes. ¿Deseas continuar?');">
-                    2. Auditar (Azure/Colab)
-                </button>
-            </form>
-        </div>
-    </div>
-
-    @if (TempData["SuccessMessage"] != null)
-    {
-        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
-            <strong>¡Ejecución Exitosa!</strong> @TempData["SuccessMessage"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
+<style>
+    /* Efectos de KPI Clickeables */
+    .kpi-card {
+        cursor: pointer;
+        transition: transform 0.2s ease;
     }
 
-    @if (TempData["ErrorMessage"] != null)
-    {
-        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
-            <strong>Error Operativo:</strong> @TempData["ErrorMessage"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
+        .kpi-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px rgba(0,0,0,0.1) !important;
+        }
+
+    .kpi-inactive {
+        opacity: 0.5;
+        filter: grayscale(40%);
     }
 
-    @{
-        int totalAP = 0;
-        int totalAL = 0;
-        int totalColab = 0;
-        int totalPendiente = 0;
+    .badge-clickable {
+        cursor: pointer;
+        transition: opacity 0.2s;
+    }
 
-        foreach (var tenant in Model)
-        {
-            bool hasAP = tenant.Subscriptions != null && tenant.Subscriptions.Any(s => s.Category == "AP");
-            bool hasAL = tenant.Subscriptions != null && tenant.Subscriptions.Any(s => s.Category == "AL");
-            bool hasColab = tenant.Subscriptions != null && tenant.Subscriptions.Any(s => s.Category == "Colab");
+        .badge-clickable:hover {
+            opacity: 0.8;
+        }
 
-            if (hasAP) totalAP++;
-            if (hasAL) totalAL++;
-            if (hasColab && !hasAP && !hasAL) totalColab++;
-            if (!hasAP && !hasAL && !hasColab) totalPendiente++;
+    /* SISTEMA DE BANDERAS REGIONALES */
+    .flag-co, .flag-ec {
+        background: linear-gradient(to bottom, #FFCD00 50%, #003087 50% 75%, #C8102E 75%);
+        color: white !important;
+        text-shadow: 1px 1px 2px #000;
+        border: none !important;
+    }
+
+    .flag-pe {
+        background: linear-gradient(to right, #D91023 33%, #FFF 33% 66%, #D91023 66%);
+        color: #000 !important;
+        text-shadow: 0 0 2px #fff;
+        border: 1px solid #eee !important;
+    }
+
+    .flag-cr {
+        background: linear-gradient(to bottom, #001489 16%, #FFF 16% 33%, #DA291C 33% 66%, #FFF 66% 83%, #001489 83%);
+        color: white !important;
+        text-shadow: 1px 1px 2px #000;
+        border: none !important;
+    }
+
+    .flag-bo {
+        background: linear-gradient(to bottom, #DA291C 33%, #F4E400 33% 66%, #007A33 66%);
+        color: white !important;
+        text-shadow: 1px 1px 2px #000;
+        border: none !important;
+    }
+
+    .flag-pa {
+        background: linear-gradient(to right, #FFF 50%, #DA291C 50%) top / 100% 50% no-repeat, linear-gradient(to right, #001489 50%, #FFF 50%) bottom / 100% 50% no-repeat;
+        color: white !important;
+        text-shadow: 1px 1px 2px #000;
+        border: none !important;
+    }
+
+    .flag-default {
+        background-color: #f3f4f6;
+        color: #4b5563;
+    }
+
+    /* Animación de Pulso para Estados Activos (Running) */
+    .pulse-success {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background-color: #10b981;
+        border-radius: 50%;
+        margin-right: 5px;
+        animation: pulse 2s infinite;
+    }
+
+    @@keyframes pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+        }
+
+        70% {
+            box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+        }
+
+        100% {
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
         }
     }
 
+    .sortable-header {
+        cursor: pointer;
+        user-select: none;
+    }
+
+        .sortable-header:hover {
+            background-color: #f8f9fa;
+        }
+</style>
+
+<div class="container-fluid mt-4">
+
+    @* Cabecera y Controles Principales *@
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0 fw-normal">Clientes Activos (CSP)</h2>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary bg-white text-dark fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#syncIdentitiesModal">1. Sincronizar Tenants</button>
+            <button type="button" class="btn btn-primary fw-bold shadow-sm" style="background-color: #3b82f6; border: none;" data-bs-toggle="modal" data-bs-target="#syncSubscriptionsModal">2. Obtener Suscripciones</button>
+        </div>
+    </div>
+
+    @* Feedback de Operación *@
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm border-0 rounded-3 mb-4" style="background-color: #d1fae5; color: #065f46;">
+            <div><strong class="me-1">¡Ejecución Exitosa!</strong> @TempData["SuccessMessage"]</div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    @* Cuadros de Mando (KPIs) *@
     <div class="row mb-4 g-3">
-        <div class="col-md-3">
-            <div class="card bg-primary text-white border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <h6 class="text-uppercase fw-semibold mb-1 opacity-75">Azure Plan (AP)</h6>
-                    <h2 class="display-6 fw-bold mb-0">@totalAP</h2>
-                    <small class="opacity-75">Clientes en Nuevo Comercio</small>
-                </div>
+        <div class="col-md-3" onclick="toggleCategoryFilter('AP')">
+            <div class="card shadow-sm h-100 border-0 rounded-3 kpi-card @(categoryFilter == "AP" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))" style="background-color: #3b82f6; color: white;">
+                <div class="card-body"><h6>Azure Plan (AP)</h6><h1 class="display-5 fw-bold mb-0">@ViewBag.TotalAP</h1></div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-warning text-dark border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <h6 class="text-uppercase fw-semibold mb-1 opacity-75">Legacy (AL)</h6>
-                    <h2 class="display-6 fw-bold mb-0">@totalAL</h2>
-                    <small class="opacity-75">Requieren Migración Urgente</small>
-                </div>
+        <div class="col-md-3" onclick="toggleCategoryFilter('AL')">
+            <div class="card shadow-sm h-100 border-0 rounded-3 kpi-card @(categoryFilter == "AL" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))" style="background-color: #f97316; color: white;">
+                <div class="card-body"><h6>Legacy (AL)</h6><h1 class="display-5 fw-bold mb-0">@ViewBag.TotalAL</h1></div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-light text-dark border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <h6 class="text-uppercase fw-semibold mb-1 text-muted">Colaboración (M365)</h6>
-                    <h2 class="display-6 fw-bold mb-0 text-secondary">@totalColab</h2>
-                    <small class="text-muted">Portafolio Modern Work</small>
-                </div>
+        <div class="col-md-3" onclick="toggleCategoryFilter('Colab')">
+            <div class="card shadow-sm h-100 border-0 rounded-3 kpi-card @(categoryFilter == "Colab" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))" style="background-color: #eab308; color: #1f2937;">
+                <div class="card-body"><h6>Colaboración (M365)</h6><h1 class="display-5 fw-bold mb-0">@ViewBag.TotalColab</h1></div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-white text-dark border shadow-sm h-100">
-                <div class="card-body">
-                    <h6 class="text-uppercase fw-semibold mb-1 text-muted">Sin Auditar</h6>
-                    <h2 class="display-6 fw-bold mb-0 text-secondary">@totalPendiente</h2>
-                    <small class="text-muted">Falta correr el Radar</small>
-                </div>
+        <div class="col-md-3" onclick="toggleCategoryFilter('None')">
+            <div class="card shadow-sm h-100 border-0 rounded-3 bg-white kpi-card @(categoryFilter == "None" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))">
+                <div class="card-body"><h6>En revisión</h6><h1 class="display-5 fw-bold mb-0" style="color: #9ca3af;">@ViewBag.EnRevision</h1></div>
             </div>
         </div>
     </div>
-    <div class="card shadow-sm border-0">
+
+    @* Filtros de Búsqueda *@
+    <div class="card shadow-sm border-0 mb-4 bg-light rounded-3">
+        <div class="card-body py-3">
+            <form id="radarForm" method="get" action="/Admin/Tenants" class="row g-2 align-items-center">
+                <input type="hidden" name="categoryFilter" id="categoryFilter" value="@categoryFilter" />
+                <div class="col-md-3">
+                    <select name="countryFilter" class="form-select border-0 shadow-sm" onchange="this.form.submit()">
+                        <option value="">🌍 Toda la Región (Latam)</option>
+                        @foreach (var country in countries ?? new List<string>())
+                        {
+                            <option value="@country" selected="@(currentFilter == country)">@country</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <div class="input-group shadow-sm rounded-3 overflow-hidden">
+                        <input type="text" name="searchQuery" class="form-control border-0" placeholder="Buscar por cliente, dominio o Tenant ID..." value="@searchQuery" />
+                        <button class="btn btn-white bg-white border-0 text-muted" type="submit">🔍</button>
+                    </div>
+                </div>
+                <div class="col-auto ms-auto"><span class="badge bg-secondary fs-6 px-3 py-2 rounded-2 shadow-sm">Total visibles: @Model.Count()</span></div>
+            </form>
+        </div>
+    </div>
+
+    @* Tabla de Datos con Banderas *@
+    <div class="card shadow-sm border-0 rounded-3 overflow-hidden">
         <div class="card-body p-0">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="bg-white border-bottom border-2">
                     <tr>
-                        <th>Nombre del Cliente</th>
-                        <th>Dominio Principal</th>
-                        <th>Tenant ID</th>
-                        <th>Perfil de Consumo</th>
-                        <th>Estado</th>
+                        <th class="py-3 px-4 text-dark border-0">Nombre del Cliente</th>
+                        <th class="text-dark border-0">Dominio Principal</th>
+                        <th class="text-dark border-0">Tenant ID</th>
+                        <th class="text-center text-dark border-0">Subsidiaria</th>
+                        <th class="text-center text-dark border-0">Perfil de Consumo</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @if (!Model.Any())
+                    @foreach (var item in Model)
                     {
-                        <tr>
-                            <td colspan="5" class="text-center py-5 text-muted">
-                                No hay clientes en la base de datos. Ejecuta la sincronización de identidades.
+                        string currentCountry = item.Country?.Trim() ?? "";
+                        string flagCss = currentCountry switch { "Colombia" => "flag-co", "Ecuador" => "flag-ec", "Perú" => "flag-pe", "Peru" => "flag-pe", "Costa Rica" => "flag-cr", "Bolivia" => "flag-bo", "Panamá" => "flag-pa", "Panama" => "flag-pa", _ => "flag-default" };
+
+                        <tr style="border-bottom: 1px solid #f3f4f6;">
+                            <td class="fw-bold px-4">@item.Name</td>
+                            <td class="text-muted">@item.DefaultDomain</td>
+                            <td><small class="text-muted" style="font-family: monospace;">@item.MicrosoftTenantId</small></td>
+                            <td class="text-center"><span class="badge px-3 py-1 rounded-1 shadow-sm @flagCss">@item.Country</span></td>
+                            <td class="text-center">
+                                <div class="d-flex flex-wrap justify-content-center gap-2">
+                                    @if (!item.Subscriptions.Any())
+                                    {
+                                        <span class="badge px-3 py-1 rounded-1 shadow-sm border text-muted">En revisión</span>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var group in item.Subscriptions.GroupBy(s => s.Category))
+                                        {
+                                            string catStyle = group.Key switch { "AP" => "background-color: #3b82f6; color: white;", "AL" => "background-color: #f97316; color: white;", "Colab" => "background-color: #eab308; color: #1f2937;", _ => "background-color: #9ca3af; color: white;" };
+
+                                            var subsJson = System.Text.Json.JsonSerializer.Serialize(group.Select(s => new
+                                            {
+                                                id = s.Id,
+                                                name = s.OfferName,
+                                                status = s.Status.ToLower(),
+                                                createdDate = s.CreatedDate.ToString("yyyy-MM-dd"),
+                                                modifiedDate = s.EffectiveDate?.ToString("yyyy-MM-dd") ?? "Sin cambios"
+                                            }));
+
+                                            <span class="badge px-2 py-1 rounded-1 shadow-sm badge-clickable" style="@catStyle" onclick="showSubscriptionDetails('@item.Name', '@group.Key', @subsJson)">
+                                                @group.Key (@group.Count())
+                                            </span>
+                                        }
+                                    }
+                                </div>
                             </td>
                         </tr>
-                    }
-                    else
-                    {
-                        foreach (var item in Model)
-                        {
-                            bool hasAP = item.Subscriptions != null && item.Subscriptions.Any(s => s.Category == "AP");
-                            bool hasAL = item.Subscriptions != null && item.Subscriptions.Any(s => s.Category == "AL");
-                            bool hasColab = item.Subscriptions != null && item.Subscriptions.Any(s => s.Category == "Colab");
-
-                            <tr>
-                                <td class="fw-bold text-dark">@item.Name</td>
-                                <td class="text-muted">@item.DefaultDomain</td>
-                                <td><code class="text-secondary bg-light px-2 py-1 rounded">@item.MicrosoftTenantId</code></td>
-
-                                <td>
-                                    @if (hasAP || hasAL || hasColab)
-                                    {
-                                        if (hasAP)
-                                        {
-                                            <span class="badge bg-primary px-2 py-1 me-1 mb-1" title="Azure Plan (Modern Commerce)">AP</span>
-                                        }
-                                        if (hasAL)
-                                        {
-                                            <span class="badge bg-warning text-dark border border-warning px-2 py-1 me-1 mb-1" title="Azure Legacy (Requiere Migración)">AL</span>
-                                        }
-                                        if (hasColab && !hasAP && !hasAL)
-                                        {
-                                            <span class="badge bg-light text-secondary border px-2 py-1 me-1 mb-1">Colab</span>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-light text-muted border px-2 py-1">Sin clasificar</span>
-                                    }
-                                </td>
-
-                                <td>
-                                    @if (item.IsActive)
-                                    {
-                                        <span class="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1">Activo</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger px-2 py-1">Inactivo</span>
-                                    }
-                                </td>
-                            </tr>
-                        }
                     }
                 </tbody>
             </table>
@@ -175,29 +240,145 @@
     </div>
 </div>
 
+@* MODAL A: ADVERTENCIA SINCRONIZACIÓN TENANTS (RESTAURADO) *@
+<div class="modal fade" id="syncIdentitiesModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light border-0">
+                <h5 class="modal-title fw-bold text-dark">Sincronizar Tenants</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">Estás a punto de iniciar un proceso de <strong>Sincronización de Identidades</strong> en toda la región configurada. ¿Deseas continuar?</p>
+                <div class="alert alert-warning mt-3 mb-0 py-2">
+                    <small>⚠️ <strong>Aviso:</strong> Esta acción puede tomar varios minutos y consumirá cuota de la API de Microsoft Partner Center [cite: 2026-03-02].</small>
+                </div>
+            </div>
+            <div class="modal-footer border-0 bg-light">
+                <form action="/Admin/Tenants/Sync" method="post">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary fw-bold" onclick="this.innerHTML='Procesando...'; this.disabled=true; this.form.submit();">Sí, Sincronizar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* MODAL B: ADVERTENCIA OBTENCIÓN SUSCRIPCIONES (RESTAURADO) *@
+<div class="modal fade" id="syncSubscriptionsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-0" style="background-color: #e0e7ff;">
+                <h5 class="modal-title fw-bold text-primary">Obtención de Suscripciones</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">Se iniciará la obtención de <strong>Suscripciones</strong> actuales para determinar el perfil técnico de los clientes existentes [cite: 2026-03-02].</p>
+                <div class="alert alert-warning mt-3 mb-0 py-2">
+                    <small>⚠️ <strong>Aviso:</strong> Esta acción puede tomar varios minutos y consumirá cuota de la API de Microsoft Partner Center [cite: 2026-03-02].</small>
+                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <form action="/Admin/Tenants/SyncSubscriptions" method="post">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary fw-bold" onclick="this.innerHTML='Auditanado...'; this.disabled=true; this.form.submit();">Iniciar Auditoría</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* MODAL C: DETALLE TÉCNICO DE SUSCRIPCIONES *@
+<div class="modal fade" id="subDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-0 bg-light">
+                <h5 class="modal-title fw-bold" id="modalSubTitle">Detalle Técnico</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Oferta / Servicio</th>
+                                <th>Subscription GUID</th>
+                                <th class="text-center">Estado Operativo</th>
+                                <th class="text-center">F. Creación</th>
+                                <th class="text-center pe-4 sortable-header" id="headerDate">Última Modificación ▼</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modalSubBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const searchInput = document.getElementById('searchInput');
-            const tableRows = document.querySelectorAll('tbody tr');
+        let currentSubs = [];
+        let dateSortAsc = false;
 
-            searchInput.addEventListener('keyup', function (e) {
-                const term = e.target.value.toLowerCase();
+        function toggleCategoryFilter(category) {
+            var input = document.getElementById('categoryFilter');
+            input.value = (input.value === category) ? "" : category;
+            document.getElementById('radarForm').submit();
+        }
 
-                tableRows.forEach(row => {
-                    // Si la fila es el mensaje de "No hay clientes", la ignoramos
-                    if (row.cells.length === 1) return;
+        function showSubscriptionDetails(clientName, category, subs) {
+            currentSubs = subs;
+            const statusPriority = { 'active': 1, 'suspended': 2, 'deleted': 3 };
 
-                    // Extraemos el texto de toda la fila para buscar por nombre, dominio o tag
-                    const rowText = row.textContent.toLowerCase();
-
-                    if (rowText.includes(term)) {
-                        row.style.display = '';
-                    } else {
-                        row.style.display = 'none';
-                    }
-                });
+            // Orden Zenith inicial: Por estado y luego por recencia
+            currentSubs.sort((a, b) => {
+                if (statusPriority[a.status] !== statusPriority[b.status]) {
+                    return statusPriority[a.status] - statusPriority[b.status];
+                }
+                const dateA = a.modifiedDate === "Sin cambios" ? new Date(a.createdDate) : new Date(a.modifiedDate);
+                const dateB = b.modifiedDate === "Sin cambios" ? new Date(b.createdDate) : new Date(b.modifiedDate);
+                return dateB - dateA;
             });
+
+            renderModalBody();
+            document.getElementById('modalSubTitle').innerHTML = `<span class="text-primary">${clientName}</span> - <small class="text-muted">${category}</small>`;
+            new bootstrap.Modal(document.getElementById('subDetailModal')).show();
+        }
+
+        function renderModalBody() {
+            let html = '';
+            currentSubs.forEach(s => {
+                let statusBadge = '';
+                if(s.status === 'active') {
+                    statusBadge = `<span class="badge bg-success"><span class="pulse-success"></span>Active (Running)</span>`;
+                } else if(s.status === 'deleted' || s.status === 'suspended') {
+                    statusBadge = `<span class="badge bg-danger">${s.status.toUpperCase()}</span>`;
+                } else {
+                    statusBadge = `<span class="badge bg-secondary">${s.status}</span>`;
+                }
+
+                html += `
+                    <tr>
+                        <td class="ps-4 fw-bold text-dark">${s.name}</td>
+                        <td><small class="text-muted" style="font-family:monospace">${s.id}</small></td>
+                        <td class="text-center">${statusBadge}</td>
+                        <td class="text-center text-muted">${s.createdDate}</td>
+                        <td class="text-center fw-bold pe-4 text-primary">${s.modifiedDate}</td>
+                    </tr>`;
+            });
+            document.getElementById('modalSubBody').innerHTML = html;
+        }
+
+        document.getElementById('headerDate').addEventListener('click', () => {
+            dateSortAsc = !dateSortAsc;
+            document.getElementById('headerDate').innerHTML = `Última Modificación ${dateSortAsc ? '▲' : '▼'}`;
+            currentSubs.sort((a, b) => {
+                const dateA = a.modifiedDate === "Sin cambios" ? new Date(a.createdDate) : new Date(a.modifiedDate);
+                const dateB = b.modifiedDate === "Sin cambios" ? new Date(b.createdDate) : new Date(b.modifiedDate);
+                return dateSortAsc ? dateA - dateB : dateB - dateA;
+            });
+            renderModalBody();
         });
     </script>
 }
