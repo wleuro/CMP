@@ -16,6 +16,7 @@
         // Navegación Entity Framework
         public Tenant Tenant { get; set; }
         public string Category { get; set; } // "AP", "AL" o "Colab"
+        public decimal Markup { get; set; }
         public DateTime? EffectiveDate { get; set; }
     }
 }

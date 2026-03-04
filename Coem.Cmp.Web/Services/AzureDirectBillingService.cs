@@ -11,7 +11,7 @@ namespace Coem.Cmp.Web.Services
     public interface IAzureDirectBillingService
     {
         Task<int> SyncDirectSubscriptionsAsync();
-        // Aquí agregaremos luego el método para extraer el Usage diario de los EA
+        Task SyncNightlyUsageAsync();
     }
 
     public class AzureDirectBillingService : IAzureDirectBillingService
@@ -24,17 +24,17 @@ namespace Coem.Cmp.Web.Services
         {
             _context = context;
             _httpClientFactory = httpClientFactory;
-            // Usamos el mismo protector para mantener la compatibilidad criptográfica
             _protector = dataProtectionProvider.CreateProtector("Coem.Cmp.RegionalSecrets.v1");
         }
 
+        // 1. MOTOR DE DESCUBRIMIENTO Y AUDITORÍA
         public async Task<int> SyncDirectSubscriptionsAsync()
         {
             var directConfigs = await _context.AzureDirectCredentials.Where(c => c.IsActive).ToListAsync();
 
             if (!directConfigs.Any())
             {
-                Console.WriteLine("[DIRECT-ARM] No hay credenciales de EA o Patrocinio configuradas.");
+                Console.WriteLine("[DIRECT-ARM] No hay credenciales configuradas.");
                 return 0;
             }
 
@@ -42,26 +42,11 @@ namespace Coem.Cmp.Web.Services
 
             foreach (var config in directConfigs)
             {
-                Console.WriteLine($"[DIRECT-ARM] Auditando entorno: {config.Alias} (Tenant: {config.TenantId})");
+                Console.WriteLine($"[DIRECT-ARM] Auditando entorno: {config.Alias}");
 
                 try
                 {
-                    // 1. Autenticación Directa contra ARM (Bypass de CSP)
-                    var plainTextSecret = _protector.Unprotect(config.ClientSecret);
-                    var app = ConfidentialClientApplicationBuilder.Create(config.ClientId)
-                        .WithClientSecret(plainTextSecret)
-                        .WithAuthority(new Uri($"https://login.microsoftonline.com/{config.TenantId}"))
-                        .Build();
-
-                    // Scope exclusivo para gestionar recursos y facturación directa
-                    string[] scopes = new string[] { "https://management.azure.com/.default" };
-                    var authResult = await app.AcquireTokenForClient(scopes).ExecuteAsync();
-
-                    var client = _httpClientFactory.CreateClient();
-                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authResult.AccessToken);
-                    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-                    // 2. Extraer el inventario de Suscripciones Directas
+                    var client = await GetAuthorizedClient(config);
                     var response = await client.GetAsync("https://management.azure.com/subscriptions?api-version=2022-12-01");
 
                     if (!response.IsSuccessStatusCode)
@@ -70,67 +55,42 @@ namespace Coem.Cmp.Web.Services
                         continue;
                     }
 
-                    var content = await response.Content.ReadAsStringAsync();
-                    var armData = JsonDocument.Parse(content);
-
+                    var armData = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
                     if (!armData.RootElement.TryGetProperty("value", out var items)) continue;
 
-                    // 3. Emparejamiento con el Cliente en BD
-                    // Buscamos si este TenantId ya existe como cliente. Si no, lo creamos como cliente "Directo/EA"
-                    var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.MicrosoftTenantId.ToString() == config.TenantId);
-
-                    if (tenant == null)
-                    {
-                        tenant = new Tenant
-                        {
-                            MicrosoftTenantId = Guid.Parse(config.TenantId),
-                            Name = config.Alias, // Usamos el alias comercial
-                            AgreementType = "EA/Direct", // Clasificación clave
-                            Country = "Global",
-                            IsBilledByCoem = false, // ¡CRÍTICO! COEM no factura esto, solo lo administra/monitorea
-                            IsActive = true,
-                            OnboardingDate = DateTime.UtcNow
-                        };
-                        _context.Tenants.Add(tenant);
-                        await _context.SaveChangesAsync(); // Guardamos para obtener el ID
-                    }
-
-                    // 4. Inserción / Actualización de Suscripciones
                     foreach (var item in items.EnumerateArray())
                     {
                         var subId = Guid.Parse(item.GetProperty("subscriptionId").GetString());
                         var displayName = item.GetProperty("displayName").GetString();
                         var state = item.GetProperty("state").GetString();
 
-                        // Clasificación Inteligente para el Dashboard
-                        string categoryTag = "EA"; // Por defecto Enterprise Agreement / Direct
-                        if (displayName.Contains("Sponsorship", StringComparison.OrdinalIgnoreCase) || displayName.Contains("Pass", StringComparison.OrdinalIgnoreCase))
-                        {
-                            categoryTag = "INT"; // Lo marcamos como Patrocinio/Interno
-                        }
+                        // --- PRUEBA ÁCIDA DE PERMISOS ---
+                        var costPing = await client.GetAsync($"https://management.azure.com/subscriptions/{subId}/providers/Microsoft.Consumption/usageDetails?$top=1&api-version=2023-11-01");
+                        var readPing = await client.GetAsync($"https://management.azure.com/subscriptions/{subId}/resources?$top=1&api-version=2021-04-01");
+                        var auditStr = $"Cost:{(costPing.IsSuccessStatusCode ? "OK" : "FAIL")}|Read:{(readPing.IsSuccessStatusCode ? "OK" : "FAIL")}";
 
-                        var existingSub = await _context.Subscriptions.FirstOrDefaultAsync(s => s.Id == subId);
+                        // --- GUARDADO EN EL SILO EXTERNO ---
+                        var existingSub = await _context.ExternalSubscriptions.FirstOrDefaultAsync(s => s.Id == subId);
 
-                        if (existingSub != null)
+                        if (existingSub == null)
                         {
-                            existingSub.Status = state;
-                            existingSub.OfferName = displayName;
-                            existingSub.EffectiveDate = DateTime.UtcNow; // ARM no siempre da historial acá, usamos UTC Now
-                            existingSub.Category = categoryTag;
+                            _context.ExternalSubscriptions.Add(new ExternalSubscription
+                            {
+                                Id = subId,
+                                AzureDirectCredentialId = config.Id,
+                                Name = displayName,
+                                Status = state,
+                                AuditResult = auditStr,
+                                LastSync = DateTime.UtcNow,
+                                Markup = 0.00m // Margen inicial en 0%
+                            });
                         }
                         else
                         {
-                            _context.Subscriptions.Add(new Subscription
-                            {
-                                Id = subId,
-                                TenantId = tenant.Id,
-                                OfferId = "ARM-DIRECT", // Sello de agua para saber de dónde vino
-                                OfferName = displayName,
-                                Category = categoryTag,
-                                CreatedDate = DateTime.UtcNow,
-                                EffectiveDate = DateTime.UtcNow,
-                                Status = state
-                            });
+                            existingSub.AuditResult = auditStr;
+                            existingSub.Status = state;
+                            existingSub.LastSync = DateTime.UtcNow;
+                            // Ojo: NO sobreescribimos el Markup aquí para no borrar la configuración del TAM
                         }
                         processedCount++;
                     }
@@ -142,6 +102,100 @@ namespace Coem.Cmp.Web.Services
                 }
             }
             return processedCount;
+        }
+
+        // 2. MOTOR FINANCIERO NOCTURNO (CON MARKUP)
+        public async Task SyncNightlyUsageAsync()
+        {
+            var credentials = await _context.AzureDirectCredentials.Where(c => c.IsActive).ToListAsync();
+
+            // Consumo del día anterior (cerrado oficialmente por Azure)
+            var targetDate = DateTime.UtcNow.AddDays(-1).Date;
+
+            foreach (var config in credentials)
+            {
+                try
+                {
+                    var client = await GetAuthorizedClient(config);
+
+                    // Solo traemos las suscripciones de este conector específico
+                    var subs = await _context.ExternalSubscriptions
+                        .Where(s => s.AzureDirectCredentialId == config.Id)
+                        .ToListAsync();
+
+                    foreach (var sub in subs)
+                    {
+                        // Blindaje: Evitar colisión si por error la sub existe en CSP nativo
+                        if (await _context.Subscriptions.AnyAsync(s => s.Id == sub.Id)) continue;
+
+                        var url = $"https://management.azure.com/subscriptions/{sub.Id}/providers/Microsoft.Consumption/usageDetails?metric=AmortizedCost&$filter=properties/usageStart eq '{targetDate:yyyy-MM-dd}'&api-version=2023-11-01";
+                        var response = await client.GetAsync(url);
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var usageData = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                            if (usageData.RootElement.TryGetProperty("value", out var records))
+                            {
+                                foreach (var record in records.EnumerateArray())
+                                {
+                                    var props = record.GetProperty("properties");
+                                    var productName = props.GetProperty("product").GetString();
+                                    var rawCost = props.GetProperty("costInBillingCurrency").GetDecimal();
+
+                                    // LA MATEMÁTICA DEL MARGEN (Tu rentabilidad en COEM)
+                                    decimal calculatedBilledCost = rawCost * (1 + sub.Markup);
+
+                                    // IDEMPOTENCIA: Verificar si ya guardamos este recurso hoy
+                                    bool exists = await _context.ExternalUsageRecords.AnyAsync(u =>
+                                        u.SubscriptionId == sub.Id &&
+                                        u.UsageDate == targetDate &&
+                                        u.ProductName == productName);
+
+                                    if (!exists)
+                                    {
+                                        _context.ExternalUsageRecords.Add(new ExternalUsageRecord
+                                        {
+                                            SubscriptionId = sub.Id,
+                                            UsageDate = targetDate,
+                                            ProductName = productName,
+                                            MeterCategory = props.GetProperty("meterCategory").GetString(),
+                                            Quantity = props.GetProperty("quantity").GetDecimal(),
+                                            EstimatedCost = rawCost,             // Lo que cobra Azure
+                                            MarkupPercentage = sub.Markup,       // El % aplicado ese día
+                                            BilledCost = calculatedBilledCost,   // Lo que facturas/muestras
+                                            Currency = props.GetProperty("billingCurrencyCode").GetString(),
+                                            ProviderSource = "BYOT_EA"
+                                        });
+                                    }
+                                }
+                                await _context.SaveChangesAsync();
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[NIGHTLY ERROR] {config.Alias}: {ex.Message}");
+                }
+            }
+        }
+
+        // HELPER: Autenticación centralizada
+        private async Task<HttpClient> GetAuthorizedClient(AzureDirectCredential config)
+        {
+            var plainTextSecret = _protector.Unprotect(config.ClientSecret);
+            var app = ConfidentialClientApplicationBuilder.Create(config.ClientId)
+                .WithClientSecret(plainTextSecret)
+                .WithAuthority(new Uri($"https://login.microsoftonline.com/{config.TenantId}"))
+                .Build();
+
+            string[] scopes = new string[] { "https://management.azure.com/.default" };
+            var authResult = await app.AcquireTokenForClient(scopes).ExecuteAsync();
+
+            var client = _httpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authResult.AccessToken);
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            return client;
         }
     }
 }

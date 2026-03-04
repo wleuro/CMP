@@ -8,6 +8,7 @@
         public string Status { get; set; }
         public string AuditResult { get; set; } // "Cost:OK|Read:FAIL"
         public DateTime LastSync { get; set; }
+        public decimal Markup { get; set; }
 
         public AzureDirectCredential Credential { get; set; }
     }

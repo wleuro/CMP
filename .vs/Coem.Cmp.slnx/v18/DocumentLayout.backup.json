@@ -3,32 +3,40 @@
   "WorkspaceRootPath": "C:\\Projects\\Sync\\CMP\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|c:\\projects\\sync\\cmp\\coem.cmp.web\\areas\\admin\\views\\externaltenants\\index..cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
-      "RelativeMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|solutionrelative:coem.cmp.web\\areas\\admin\\views\\externaltenants\\index..cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+      "AbsoluteMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|c:\\projects\\sync\\cmp\\coem.cmp.web\\services\\azuredirectbillingservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|solutionrelative:coem.cmp.web\\services\\azuredirectbillingservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|c:\\projects\\sync\\cmp\\coem.cmp.web\\areas\\admin\\views\\externaltenants\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|solutionrelative:coem.cmp.web\\areas\\admin\\views\\externaltenants\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|c:\\projects\\sync\\cmp\\coem.cmp.web\\areas\\admin\\controllers\\externaltenantscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|solutionrelative:coem.cmp.web\\areas\\admin\\controllers\\externaltenantscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|c:\\projects\\sync\\cmp\\coem.cmp.web\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|solutionrelative:coem.cmp.web\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|c:\\projects\\sync\\cmp\\coem.cmp.web\\services\\azuredirectbillingservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|solutionrelative:coem.cmp.web\\services\\azuredirectbillingservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{131F6153-C336-7E63-E6DE-FEC2D46E9894}|Coem.Cmp.Infra\\Coem.Cmp.Infra.csproj|c:\\projects\\sync\\cmp\\coem.cmp.infra\\data\\applicationdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{131F6153-C336-7E63-E6DE-FEC2D46E9894}|Coem.Cmp.Infra\\Coem.Cmp.Infra.csproj|solutionrelative:coem.cmp.infra\\data\\applicationdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|c:\\projects\\sync\\cmp\\coem.cmp.core\\entities\\azuredirectcredential.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|solutionrelative:coem.cmp.core\\entities\\azuredirectcredential.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|c:\\projects\\sync\\cmp\\coem.cmp.core\\entities\\externalsubscription.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|solutionrelative:coem.cmp.core\\entities\\externalsubscription.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|c:\\projects\\sync\\cmp\\coem.cmp.web\\views\\shared\\_layout.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|solutionrelative:coem.cmp.web\\views\\shared\\_layout.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|c:\\projects\\sync\\cmp\\coem.cmp.web\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|solutionrelative:coem.cmp.web\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|c:\\projects\\sync\\cmp\\coem.cmp.web\\areas\\admin\\views\\tenants\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
       "RelativeMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|solutionrelative:coem.cmp.web\\areas\\admin\\views\\tenants\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|c:\\projects\\sync\\cmp\\coem.cmp.core\\entities\\azuredirectcredential.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|solutionrelative:coem.cmp.core\\entities\\azuredirectcredential.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|c:\\projects\\sync\\cmp\\coem.cmp.web\\services\\partnercentersyncservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -46,76 +54,106 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 0,
+          "SelectedChildIndex": 5,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "Index..cshtml",
-              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Areas\\Admin\\Views\\ExternalTenants\\Index..cshtml",
-              "RelativeDocumentMoniker": "Coem.Cmp.Web\\Areas\\Admin\\Views\\ExternalTenants\\Index..cshtml",
-              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Areas\\Admin\\Views\\ExternalTenants\\Index..cshtml",
-              "RelativeToolTip": "Coem.Cmp.Web\\Areas\\Admin\\Views\\ExternalTenants\\Index..cshtml",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "DocumentIndex": 4,
+              "Title": "ExternalSubscription.cs",
+              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Core\\Entities\\ExternalSubscription.cs",
+              "RelativeDocumentMoniker": "Coem.Cmp.Core\\Entities\\ExternalSubscription.cs",
+              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Core\\Entities\\ExternalSubscription.cs",
+              "RelativeToolTip": "Coem.Cmp.Core\\Entities\\ExternalSubscription.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA0AAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-03-03T20:01:26.368Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "_Layout.cshtml",
+              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Views\\Shared\\_Layout.cshtml",
+              "RelativeDocumentMoniker": "Coem.Cmp.Web\\Views\\Shared\\_Layout.cshtml",
+              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Views\\Shared\\_Layout.cshtml",
+              "RelativeToolTip": "Coem.Cmp.Web\\Views\\Shared\\_Layout.cshtml",
+              "ViewState": "AgIAAAwAAAAAAAAAAAAAABwAAAAgAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
+              "WhenOpened": "2026-03-03T19:11:09.536Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "Index.cshtml",
+              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Areas\\Admin\\Views\\ExternalTenants\\Index.cshtml",
+              "RelativeDocumentMoniker": "Coem.Cmp.Web\\Areas\\Admin\\Views\\ExternalTenants\\Index.cshtml",
+              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Areas\\Admin\\Views\\ExternalTenants\\Index.cshtml",
+              "RelativeToolTip": "Coem.Cmp.Web\\Areas\\Admin\\Views\\ExternalTenants\\Index.cshtml",
+              "ViewState": "AgIAAI0AAAAAAAAAAAAiwKEAAACGAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
               "WhenOpened": "2026-03-03T19:10:42.344Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 2,
               "Title": "ExternalTenantsController.cs",
               "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Areas\\Admin\\Controllers\\ExternalTenantsController.cs",
               "RelativeDocumentMoniker": "Coem.Cmp.Web\\Areas\\Admin\\Controllers\\ExternalTenantsController.cs",
               "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Areas\\Admin\\Controllers\\ExternalTenantsController.cs",
               "RelativeToolTip": "Coem.Cmp.Web\\Areas\\Admin\\Controllers\\ExternalTenantsController.cs",
-              "ViewState": "AgIAACYAAAAAAAAAAAAuwFEAAAABAAAAAAAAAA==",
+              "ViewState": "AgIAAKgAAAAAAAAAAAAiwNEAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-03-03T19:08:50.274Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 6,
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Program.cs",
               "RelativeDocumentMoniker": "Coem.Cmp.Web\\Program.cs",
               "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Program.cs",
               "RelativeToolTip": "Coem.Cmp.Web\\Program.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABAAAAAnAAAAAAAAAA==",
+              "ViewState": "AgIAADkAAAAAAAAAAAAiwGIAAAAKAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-03-03T18:57:36.598Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 0,
               "Title": "AzureDirectBillingService.cs",
               "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Services\\AzureDirectBillingService.cs",
               "RelativeDocumentMoniker": "Coem.Cmp.Web\\Services\\AzureDirectBillingService.cs",
               "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Services\\AzureDirectBillingService.cs",
               "RelativeToolTip": "Coem.Cmp.Web\\Services\\AzureDirectBillingService.cs",
-              "ViewState": "AgIAAGcAAAAAAAAAAAAuwJIAAAABAAAAAAAAAA==",
+              "ViewState": "AgIAAGkAAAAAAAAAAAAiwHsAAAAdAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-03-03T18:57:09.685Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 3,
               "Title": "ApplicationDbContext.cs",
               "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Infra\\Data\\ApplicationDbContext.cs",
               "RelativeDocumentMoniker": "Coem.Cmp.Infra\\Data\\ApplicationDbContext.cs",
               "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Infra\\Data\\ApplicationDbContext.cs",
               "RelativeToolTip": "Coem.Cmp.Infra\\Data\\ApplicationDbContext.cs",
-              "ViewState": "AgIAABEAAAAAAAAAAAA8wDwAAAABAAAAAAAAAA==",
+              "ViewState": "AgIAAB0AAAAAAAAAAAAiwEYAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-03-03T18:45:05.657Z",
               "EditorCaption": ""
             },
             {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{c6f34f0d-7ae5-4f3a-be61-fe0c21ae9eb8}"
+            },
+            {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 8,
               "Title": "AzureDirectCredential.cs",
               "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Core\\Entities\\AzureDirectCredential.cs",
               "RelativeDocumentMoniker": "Coem.Cmp.Core\\Entities\\AzureDirectCredential.cs",
@@ -128,7 +166,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 7,
+              "DocumentIndex": 9,
               "Title": "PartnerCenterSyncService.cs",
               "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Services\\PartnerCenterSyncService.cs",
               "RelativeDocumentMoniker": "Coem.Cmp.Web\\Services\\PartnerCenterSyncService.cs",
@@ -141,7 +179,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 8,
+              "DocumentIndex": 10,
               "Title": "Subscription.cs",
               "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Core\\Entities\\Subscription.cs",
               "RelativeDocumentMoniker": "Coem.Cmp.Core\\Entities\\Subscription.cs",
@@ -153,13 +191,13 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
+              "DocumentIndex": 7,
               "Title": "index.cshtml",
               "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Areas\\Admin\\Views\\Tenants\\index.cshtml",
               "RelativeDocumentMoniker": "Coem.Cmp.Web\\Areas\\Admin\\Views\\Tenants\\index.cshtml",
-              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Areas\\Admin\\Views\\Tenants\\index.cshtml*",
-              "RelativeToolTip": "Coem.Cmp.Web\\Areas\\Admin\\Views\\Tenants\\index.cshtml*",
-              "ViewState": "AgIAAF4BAAAAAAAAAAAcwIoBAAABAAAAAAAAAA==",
+              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Areas\\Admin\\Views\\Tenants\\index.cshtml",
+              "RelativeToolTip": "Coem.Cmp.Web\\Areas\\Admin\\Views\\Tenants\\index.cshtml",
+              "ViewState": "AgIAAGABAAAAAAAAAADwv3IBAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
               "WhenOpened": "2026-03-03T04:33:15.236Z",
               "EditorCaption": ""
