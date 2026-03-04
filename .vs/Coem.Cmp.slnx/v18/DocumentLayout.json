@@ -3,32 +3,12 @@
   "WorkspaceRootPath": "C:\\Projects\\Sync\\CMP\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|c:\\projects\\sync\\cmp\\coem.cmp.web\\services\\azuredirectbillingservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{4B3B6821-9AD2-4918-1D7F-E53FAFF8BE98}|Coem.Cmp.Web\\Coem.Cmp.Web.csproj|solutionrelative:coem.cmp.web\\services\\azuredirectbillingservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{9844B75D-BD18-4D09-BC8D-A4D243B649EB}|Coem.Cmp.Worker\\Coem.Cmp.Worker.csproj|c:\\projects\\sync\\cmp\\coem.cmp.worker\\nightlybillingfunction.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{9844B75D-BD18-4D09-BC8D-A4D243B649EB}|Coem.Cmp.Worker\\Coem.Cmp.Worker.csproj|solutionrelative:coem.cmp.worker\\nightlybillingfunction.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{131F6153-C336-7E63-E6DE-FEC2D46E9894}|Coem.Cmp.Infra\\Coem.Cmp.Infra.csproj|c:\\projects\\sync\\cmp\\coem.cmp.infra\\data\\applicationdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{131F6153-C336-7E63-E6DE-FEC2D46E9894}|Coem.Cmp.Infra\\Coem.Cmp.Infra.csproj|solutionrelative:coem.cmp.infra\\data\\applicationdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|c:\\projects\\sync\\cmp\\coem.cmp.core\\entities\\subscription.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|solutionrelative:coem.cmp.core\\entities\\subscription.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|c:\\projects\\sync\\cmp\\coem.cmp.core\\entities\\externalsubscription.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|solutionrelative:coem.cmp.core\\entities\\externalsubscription.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|c:\\projects\\sync\\cmp\\coem.cmp.core\\billing\\externalusagerecord.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|solutionrelative:coem.cmp.core\\billing\\externalusagerecord.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|c:\\projects\\sync\\cmp\\coem.cmp.core\\billing\\pcusagerecord.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|solutionrelative:coem.cmp.core\\billing\\pcusagerecord.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|c:\\projects\\sync\\cmp\\coem.cmp.core\\billing\\usagerecordbase.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CA703B7E-A3FF-28AD-70E4-9C9336CEE696}|Coem.Cmp.Core\\Coem.Cmp.Core.csproj|solutionrelative:coem.cmp.core\\billing\\usagerecordbase.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{9844B75D-BD18-4D09-BC8D-A4D243B649EB}|Coem.Cmp.Worker\\Coem.Cmp.Worker.csproj|c:\\projects\\sync\\cmp\\coem.cmp.worker\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{9844B75D-BD18-4D09-BC8D-A4D243B649EB}|Coem.Cmp.Worker\\Coem.Cmp.Worker.csproj|solutionrelative:coem.cmp.worker\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -43,93 +23,27 @@
             {
               "$type": "Document",
               "DocumentIndex": 0,
-              "Title": "AzureDirectBillingService.cs",
-              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Services\\AzureDirectBillingService.cs",
-              "RelativeDocumentMoniker": "Coem.Cmp.Web\\Services\\AzureDirectBillingService.cs",
-              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Web\\Services\\AzureDirectBillingService.cs",
-              "RelativeToolTip": "Coem.Cmp.Web\\Services\\AzureDirectBillingService.cs",
-              "ViewState": "AgIAAKUAAAAAAAAAAAAqwLcAAABYAAAAAAAAAA==",
+              "Title": "NightlyBillingFunction.cs",
+              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Worker\\NightlyBillingFunction.cs",
+              "RelativeDocumentMoniker": "Coem.Cmp.Worker\\NightlyBillingFunction.cs",
+              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Worker\\NightlyBillingFunction.cs",
+              "RelativeToolTip": "Coem.Cmp.Worker\\NightlyBillingFunction.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABwAAABAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-03-04T03:11:52.236Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "Subscription.cs",
-              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Core\\Entities\\Subscription.cs",
-              "RelativeDocumentMoniker": "Coem.Cmp.Core\\Entities\\Subscription.cs",
-              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Core\\Entities\\Subscription.cs",
-              "RelativeToolTip": "Coem.Cmp.Core\\Entities\\Subscription.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABIAAAArAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-03-04T00:05:09.962Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "ExternalSubscription.cs",
-              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Core\\Entities\\ExternalSubscription.cs",
-              "RelativeDocumentMoniker": "Coem.Cmp.Core\\Entities\\ExternalSubscription.cs",
-              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Core\\Entities\\ExternalSubscription.cs",
-              "RelativeToolTip": "Coem.Cmp.Core\\Entities\\ExternalSubscription.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAoAAAArAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-03-04T00:04:43.776Z",
+              "WhenOpened": "2026-03-04T03:53:48.625Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 1,
-              "Title": "ApplicationDbContext.cs",
-              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Infra\\Data\\ApplicationDbContext.cs",
-              "RelativeDocumentMoniker": "Coem.Cmp.Infra\\Data\\ApplicationDbContext.cs",
-              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Infra\\Data\\ApplicationDbContext.cs",
-              "RelativeToolTip": "Coem.Cmp.Infra\\Data\\ApplicationDbContext.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABYAAABAAAAAAAAAAA==",
+              "Title": "Program.cs",
+              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Worker\\Program.cs",
+              "RelativeDocumentMoniker": "Coem.Cmp.Worker\\Program.cs",
+              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Worker\\Program.cs",
+              "RelativeToolTip": "Coem.Cmp.Worker\\Program.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAB4AAAALAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-03-04T00:02:50.978Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "ExternalUsageRecord.cs",
-              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Core\\Billing\\ExternalUsageRecord.cs",
-              "RelativeDocumentMoniker": "Coem.Cmp.Core\\Billing\\ExternalUsageRecord.cs",
-              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Core\\Billing\\ExternalUsageRecord.cs",
-              "RelativeToolTip": "Coem.Cmp.Core\\Billing\\ExternalUsageRecord.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAABAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-03-03T23:46:56.065Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 5,
-              "Title": "PCUsageRecord.cs",
-              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Core\\Billing\\PCUsageRecord.cs",
-              "RelativeDocumentMoniker": "Coem.Cmp.Core\\Billing\\PCUsageRecord.cs",
-              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Core\\Billing\\PCUsageRecord.cs",
-              "RelativeToolTip": "Coem.Cmp.Core\\Billing\\PCUsageRecord.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAABAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-03-03T23:46:36.122Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 6,
-              "Title": "UsageRecordBase.cs",
-              "DocumentMoniker": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Core\\Billing\\UsageRecordBase.cs",
-              "RelativeDocumentMoniker": "Coem.Cmp.Core\\Billing\\UsageRecordBase.cs",
-              "ToolTip": "C:\\Projects\\Sync\\CMP\\Coem.Cmp.Core\\Billing\\UsageRecordBase.cs",
-              "RelativeToolTip": "Coem.Cmp.Core\\Billing\\UsageRecordBase.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABMAAAABAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-03-03T23:46:18.223Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-03-04T03:53:24.687Z"
             }
           ]
         }
