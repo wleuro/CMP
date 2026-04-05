@@ -1,5 +1,9 @@
-﻿using System.Net.Http.Headers;
+﻿using System;
+using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Client;
 using Coem.Cmp.Infra.Data;
@@ -12,6 +16,8 @@ namespace Coem.Cmp.Web.Services
     {
         Task<int> SyncCustomersAsync();
         Task<int> SyncSubscriptionsAsync();
+        // --- NUEVO: Motor nocturno para CSP ---
+        Task SyncNightlyUsageAsync();
     }
 
     public class PartnerCenterSyncService : IPartnerCenterSyncService
@@ -131,14 +137,12 @@ namespace Coem.Cmp.Web.Services
                             var offerId = item.GetProperty("offerId").GetString();
                             var status = item.GetProperty("status").GetString();
 
-                            // Validamos que el JSON devuelva effectiveStartDate para evitar caídas
                             DateTime? effectiveDate = null;
                             if (item.TryGetProperty("effectiveStartDate", out var dateElement) && dateElement.ValueKind != JsonValueKind.Null)
                             {
                                 effectiveDate = dateElement.GetDateTime();
                             }
 
-                            // 1. LÓGICA DE CATEGORIZACIÓN (Incluyendo INT)
                             string categoryTag = "Colab";
                             if (offerName.Contains("Azure plan", StringComparison.OrdinalIgnoreCase) || offerId.Contains("DZH318Z0BPS6"))
                             {
@@ -146,19 +150,17 @@ namespace Coem.Cmp.Web.Services
                             }
                             else if (offerName.Contains("Sponsorship", StringComparison.OrdinalIgnoreCase) || offerName.Contains("Pass", StringComparison.OrdinalIgnoreCase))
                             {
-                                categoryTag = "INT"; // Marcar como interno/patrocinio
+                                categoryTag = "INT";
                             }
                             else if (offerName.Contains("Microsoft Azure", StringComparison.OrdinalIgnoreCase) || offerId.Contains("MS-AZR-0145P"))
                             {
                                 categoryTag = "AL";
                             }
 
-                            // 2. LÓGICA UPSERT (Actualizar o Insertar)
                             var existingSub = await _context.Subscriptions.FirstOrDefaultAsync(s => s.Id == subId);
 
                             if (existingSub != null)
                             {
-                                // Refrescar estado y fechas
                                 existingSub.Status = status;
                                 existingSub.EffectiveDate = effectiveDate;
                                 existingSub.OfferName = offerName;
@@ -174,7 +176,8 @@ namespace Coem.Cmp.Web.Services
                                     Category = categoryTag,
                                     CreatedDate = item.GetProperty("creationDate").GetDateTime(),
                                     EffectiveDate = effectiveDate,
-                                    Status = status
+                                    Status = status,
+                                    Markup = 0.00m // Por defecto 0% en CSP hasta ser ajustado
                                 });
                             }
                             processedCount++;
@@ -189,6 +192,153 @@ namespace Coem.Cmp.Web.Services
                 }
             }
             return processedCount;
+        }
+
+        // --- MOTOR NOCTURNO PARA CSP (EL CEREBRO FINANCIERO ZENITH) ---
+        public async Task SyncNightlyUsageAsync()
+        {
+            var regionalConfigs = await _context.PartnerCenterCredentials.Where(c => c.IsActive).ToListAsync();
+            var targetDate = DateTime.UtcNow.AddDays(-5).Date;
+
+            foreach (var config in regionalConfigs)
+            {
+                try
+                {
+                    var authResult = await GetTokenAsync(config);
+                    var client = CreateHttpClient(authResult.AccessToken);
+
+                    // Traemos solo los tenants de esta credencial
+                    var tenants = await _context.Tenants.Where(t => t.Country == config.CountryName).ToListAsync();
+
+                    foreach (var tenant in tenants)
+                    {
+                        // Solo buscamos uso de Azure Plan y Azure Legacy
+                        var subscriptions = await _context.Subscriptions
+                            .Where(s => s.TenantId == tenant.Id && (s.Category == "AP" || s.Category == "AL"))
+                            .ToListAsync();
+
+                        foreach (var sub in subscriptions)
+                        {
+                            if (sub.Category == "AL")
+                            {
+                                // FLUJO 1: AZURE LEGACY
+                                string url = $"https://api.partnercenter.microsoft.com/v1/customers/{tenant.MicrosoftTenantId}/subscriptions/{sub.Id}/utilizations?start_time={targetDate:yyyy-MM-dd}T00:00:00Z&end_time={targetDate:yyyy-MM-dd}T23:59:59Z";
+                                var response = await client.GetAsync(url);
+
+                                if (!response.IsSuccessStatusCode)
+                                {
+                                    Console.WriteLine($"[ZENITH] Ignorando AL sub {sub.Id} - Status: {response.StatusCode}");
+                                    continue;
+                                }
+
+                                var content = await response.Content.ReadAsStringAsync();
+                                var usageData = JsonDocument.Parse(content);
+
+                                if (!usageData.RootElement.TryGetProperty("items", out var items)) continue;
+
+                                foreach (var item in items.EnumerateArray())
+                                {
+                                    var resource = item.GetProperty("resource");
+                                    var resourceName = resource.GetProperty("name").GetString();
+                                    var quantity = item.GetProperty("quantity").GetDecimal();
+
+                                    decimal rawCost = 1.0m; // MVP Placeholder Legacy (Cambiar por cruce con Rate Card en el futuro)
+                                    decimal calculatedBilledCost = rawCost * (1 + sub.Markup);
+
+                                    bool exists = await _context.PCUsageRecords.AnyAsync(u =>
+                                        u.SubscriptionId == sub.Id && u.UsageDate == targetDate && u.ResourceName == resourceName);
+
+                                    if (!exists)
+                                    {
+                                        _context.PCUsageRecords.Add(new PCUsageRecord
+                                        {
+                                            SubscriptionId = sub.Id,
+                                            UsageDate = targetDate,
+                                            ProductName = resource.GetProperty("subcategory").GetString(),
+                                            MeterCategory = resource.GetProperty("category").GetString(),
+                                            Quantity = quantity,
+                                            ResourceId = resource.GetProperty("id").GetString(),
+                                            ResourceName = resourceName,
+                                            EstimatedCost = rawCost,
+                                            MarkupPercentage = sub.Markup,
+                                            BilledCost = calculatedBilledCost,
+                                            Currency = "USD",
+                                            ProviderSource = "PartnerCenter_AL"
+                                        });
+                                    }
+                                }
+                            }
+                            else if (sub.Category == "AP")
+                            {
+                                // FLUJO 2: AZURE PLAN (NCE) - El estándar de oro
+                                string url = $"https://api.partnercenter.microsoft.com/v1/customers/{tenant.MicrosoftTenantId}/invoices/unbilled/lineitems?provider=azure&invoicelineitemtype=billinglineitems";
+                                var response = await client.GetAsync(url);
+
+                                if (!response.IsSuccessStatusCode)
+                                {
+                                    Console.WriteLine($"[ZENITH] Error AP en Tenant {tenant.MicrosoftTenantId} - Status: {response.StatusCode}");
+                                    continue;
+                                }
+
+                                var content = await response.Content.ReadAsStringAsync();
+                                var pcData = JsonDocument.Parse(content);
+
+                                if (!pcData.RootElement.TryGetProperty("items", out var items)) continue;
+
+                                foreach (var item in items.EnumerateArray())
+                                {
+                                    // 1. Filtro de suscripción defensivo
+                                    var itemSubIdStr = item.TryGetProperty("subscriptionId", out var sid) && sid.ValueKind != JsonValueKind.Null ? sid.GetString() : null;
+                                    if (string.IsNullOrEmpty(itemSubIdStr) || !Guid.TryParse(itemSubIdStr, out var itemSubId) || itemSubId != sub.Id) continue;
+
+                                    // 2. Extracción Defensiva Zenith (Blindaje contra nulos)
+                                    var resourceName = item.TryGetProperty("meterName", out var mn) && mn.ValueKind != JsonValueKind.Null ? mn.GetString() : "Recurso Desconocido";
+                                    var productName = item.TryGetProperty("productName", out var pn) && pn.ValueKind != JsonValueKind.Null ? pn.GetString() : "Producto N/A";
+                                    var meterCategory = item.TryGetProperty("meterCategory", out var mc) && mc.ValueKind != JsonValueKind.Null ? mc.GetString() : "Categoria N/A";
+                                    var resourceId = item.TryGetProperty("resourceId", out var ri) && ri.ValueKind != JsonValueKind.Null ? ri.GetString() : "ID_No_Provisto";
+                                    var currency = item.TryGetProperty("currency", out var curr) && curr.ValueKind != JsonValueKind.Null ? curr.GetString() : "USD";
+
+                                    decimal quantity = item.TryGetProperty("consumedQuantity", out var q) && q.ValueKind != JsonValueKind.Null ? q.GetDecimal() : 0m;
+                                    decimal rawCost = item.TryGetProperty("pretaxCharges", out var c) && c.ValueKind != JsonValueKind.Null ? c.GetDecimal() : 0m;
+
+                                    // 3. Regla de Negocio: Si no hay cantidad ni costo, es ruido de la API. Lo saltamos.
+                                    if (rawCost == 0m && quantity == 0m) continue;
+
+                                    decimal calculatedBilledCost = rawCost * (1 + sub.Markup);
+
+                                    // 4. Verificación de duplicados e Inserción
+                                    bool exists = await _context.PCUsageRecords.AnyAsync(u =>
+                                        u.SubscriptionId == sub.Id && u.UsageDate == targetDate && u.ResourceName == resourceName);
+
+                                    if (!exists)
+                                    {
+                                        _context.PCUsageRecords.Add(new PCUsageRecord
+                                        {
+                                            SubscriptionId = sub.Id,
+                                            UsageDate = targetDate,
+                                            ProductName = productName,
+                                            MeterCategory = meterCategory,
+                                            Quantity = quantity,
+                                            ResourceId = resourceId,
+                                            ResourceName = resourceName,
+                                            EstimatedCost = rawCost,
+                                            MarkupPercentage = sub.Markup,
+                                            BilledCost = calculatedBilledCost,
+                                            Currency = currency,
+                                            ProviderSource = "PartnerCenter_AP"
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        await _context.SaveChangesAsync();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ERROR NIGHTLY PC] {config.CountryName}: {ex.Message}");
+                }
+            }
         }
 
         private async Task<AuthenticationResult> GetTokenAsync(PartnerCenterCredential config)

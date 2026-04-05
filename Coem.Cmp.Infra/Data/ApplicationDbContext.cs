@@ -76,15 +76,15 @@ namespace Coem.Cmp.Infra.Data
                 entity.HasIndex(e => new { e.SubscriptionId, e.UsageDate });
                 entity.HasIndex(e => e.UsageDate);
 
+                // --- NUEVO: ÍNDICE DE GRANULARIDAD MARESA ---
+                // Vital para búsquedas instantáneas por Máquina Virtual
+                entity.HasIndex(e => e.ResourceName);
+
                 // Precisión financiera: 4 decimales para evitar fugas en el volumen
                 entity.Property(e => e.Quantity).HasPrecision(18, 4);
                 entity.Property(e => e.EstimatedCost).HasPrecision(18, 4);
                 entity.Property(e => e.BilledCost).HasPrecision(18, 4);
                 entity.Property(e => e.MarkupPercentage).HasPrecision(5, 4);
-
-                // Nota Arquitectónica: Ya no atamos el consumo al TenantId directamente.
-                // El modelo relacional correcto es: Usage -> Subscription -> Tenant.
-                // Esto normaliza la base de datos y la hace mucho más robusta.
             });
         }
     }

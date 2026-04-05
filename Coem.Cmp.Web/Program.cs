@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore; // Requerido para SQL
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 using Coem.Cmp.Web.Services;
+using Microsoft.AspNetCore.DataProtection;
+using Azure.Storage.Blobs; // Por si necesitas manipular el cliente de blobs directamente
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -56,6 +58,13 @@ builder.Services.AddRazorPages()
     .AddMicrosoftIdentityUI();
 
 builder.Services.AddHttpClient(); // Vital para no agotar los sockets del servidor
+
+// Web - Program.cs (Línea 67 aprox)
+var storageConnectionString = builder.Configuration.GetConnectionString("AzureWebJobsStorage");
+
+builder.Services.AddDataProtection()
+    .PersistKeysToAzureBlobStorage(storageConnectionString, "keys", "keys.xml")
+    .SetApplicationName("CoemCmp"); // ¡OJO! Debe ser idéntico al del Worker
 
 // =========================================================================
 // *** REGISTRO DE MOTORES FINOPS (DEBEN IR ANTES DEL BUILD) ***

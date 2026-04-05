@@ -6,10 +6,16 @@
     <OutputType>Exe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <UserSecretsId>ff469fb9-f925-42a1-a9f6-c5754bde7f1a</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="local.settings.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" Version="1.5.1" />
     <PackageReference Include="Microsoft.ApplicationInsights.WorkerService" Version="2.23.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.0.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="2.0.0" />
@@ -19,7 +25,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Coem.Cmp.Core\Coem.Cmp.Core.csproj" />
     <ProjectReference Include="..\Coem.Cmp.Infra\Coem.Cmp.Infra.csproj" />
+    <ProjectReference Include="..\Coem.Cmp.Web\Coem.Cmp.Web.csproj" />
   </ItemGroup>
 
 </Project>
