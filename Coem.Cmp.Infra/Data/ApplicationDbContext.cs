@@ -19,9 +19,15 @@ namespace Coem.Cmp.Infra.Data
         public DbSet<AzureDirectCredential> AzureDirectCredentials { get; set; }
         public DbSet<ExternalSubscription> ExternalSubscriptions { get; set; }
 
-        // --- MOTOR FINANCIERO ZENITH (SILOS DE CONSUMO AISLADOS) ---
+        // --- MOTOR FINANCIERO (SILOS DE CONSUMO AISLADOS) ---
         public DbSet<PCUsageRecord> PCUsageRecords { get; set; }
         public DbSet<ExternalUsageRecord> ExternalUsageRecords { get; set; }
+
+        // --- MOTOR DE SEGURIDAD Y GOBERNANZA (RBAC) ---
+        public DbSet<Role> Roles { get; set; }
+        public DbSet<Permission> Permissions { get; set; }
+        public DbSet<RolePermission> RolePermissions { get; set; }
+        public DbSet<UserProfile> UserProfiles { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -36,7 +42,6 @@ namespace Coem.Cmp.Infra.Data
             modelBuilder.Entity<Subscription>(entity =>
             {
                 entity.HasIndex(s => s.Id);
-                // Precisión del 5,4 permite guardar porcentajes como 0.1500 (15%)
                 entity.Property(s => s.Markup).HasPrecision(5, 4);
             });
 
@@ -51,20 +56,55 @@ namespace Coem.Cmp.Infra.Data
                       .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(e => e.AzureDirectCredentialId);
-                entity.Property(e => e.Markup).HasPrecision(5, 4); // Margen para gestión externa
+                entity.Property(e => e.Markup).HasPrecision(5, 4);
             });
 
             // 4. AZURE DIRECT CREDENTIALS (BYOT)
             modelBuilder.Entity<AzureDirectCredential>()
                 .HasIndex(a => a.TenantId);
 
-            // 5. SILOS DE CONSUMO: Invocamos el constructor maestro para ambos
+            // --- CONFIGURACIÓN DE SEGURIDAD ---
+
+            // Llave compuesta para la tabla transaccional de Permisos
+            modelBuilder.Entity<RolePermission>(entity =>
+            {
+                entity.HasKey(rp => new { rp.RoleId, rp.PermissionId });
+
+                entity.HasOne(rp => rp.Role)
+                      .WithMany(r => r.RolePermissions)
+                      .HasForeignKey(rp => rp.RoleId);
+
+                entity.HasOne(rp => rp.Permission)
+                      .WithMany(p => p.RolePermissions)
+                      .HasForeignKey(rp => rp.PermissionId);
+            });
+
+            // 5. IDENTIDADES (UserProfile consolidado)
+            modelBuilder.Entity<UserProfile>(entity =>
+            {
+                // Unicidad Absoluta de Identidad
+                entity.HasIndex(u => u.Upn).IsUnique();
+
+                // Aislamiento Multi-Tenant (Protección de Datos)
+                entity.HasOne(u => u.Tenant)
+                      .WithMany()
+                      .HasForeignKey(u => u.TenantId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // Relación con Rol 
+                entity.HasOne(u => u.Role)
+                      .WithMany()
+                      .HasForeignKey(u => u.RoleId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // 6. SILOS DE CONSUMO (Aplica a PC y BYOT)
             ConfigureUsageSilo<PCUsageRecord>(modelBuilder);
             ConfigureUsageSilo<ExternalUsageRecord>(modelBuilder);
         }
 
         /// <summary>
-        /// Aplica las reglas estrictas de FinOps a cualquier tabla de consumo
+        /// Aplica las reglas estrictas de FinOps y Aislamiento a cualquier tabla de consumo
         /// </summary>
         private void ConfigureUsageSilo<T>(ModelBuilder modelBuilder) where T : UsageRecordBase
         {
@@ -72,15 +112,24 @@ namespace Coem.Cmp.Infra.Data
             {
                 entity.HasKey(e => e.Id);
 
-                // Índices críticos para que el portal cargue rápido los gráficos
-                entity.HasIndex(e => new { e.SubscriptionId, e.UsageDate });
-                entity.HasIndex(e => e.UsageDate);
+                // --- 1. EL ÍNDICE DIOS (Covering Index) ---
+                // Vital para agrupar costos por cliente y mes en milisegundos.
+                entity.HasIndex(e => new { e.TenantId, e.UsageDate, e.SubscriptionId })
+                      .IncludeProperties(e => new { e.BilledCost, e.EstimatedCost, e.ResourceName, e.ChargeType });
 
-                // --- NUEVO: ÍNDICE DE GRANULARIDAD MARESA ---
-                // Vital para búsquedas instantáneas por Máquina Virtual
-                entity.HasIndex(e => e.ResourceName);
+                // --- 2. ÍNDICES FINOPS ---
+                // Para consultas rápidas de autogestión sin tocar el JSON
+                entity.HasIndex(e => e.FinOpsEnvironment);
+                entity.HasIndex(e => e.FinOpsCostCenter);
 
-                // Precisión financiera: 4 decimales para evitar fugas en el volumen
+                // --- 3. AISLAMIENTO MULTI-TENANT ---
+                // Obliga a que cada registro de consumo pertenezca a un cliente real
+                entity.HasOne(e => e.Tenant)
+                      .WithMany()
+                      .HasForeignKey(e => e.TenantId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // --- 4. PRECISIÓN FINANCIERA ---
                 entity.Property(e => e.Quantity).HasPrecision(18, 4);
                 entity.Property(e => e.EstimatedCost).HasPrecision(18, 4);
                 entity.Property(e => e.BilledCost).HasPrecision(18, 4);

@@ -1,22 +1,223 @@
-html {
-  font-size: 14px;
-}
-
-@media (min-width: 768px) {
-  html {
-    font-size: 16px;
-  }
-}
-
-.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
-}
-
-html {
-  position: relative;
-  min-height: 100%;
+:root {
+    /* Colores Corporativos Oficiales */
+    --coem-dark: #1A003C; /* Azul Corporativo */
+    --coem-red: #FF0126; /* Rojo Corporativo */
+    --coem-magenta: #C60161; /* Magenta Corporativo */
+    /* Alias de retrocompatibilidad para las vistas */
+    --coem-primary: #1A003C;
+    --coem-accent: #C60161;
+    /* Colores de Superficie y Texto */
+    --coem-bg: #F4F7FC; /* Fondo gris sutil para que las tarjetas resalten */
+    --coem-surface: #FFFFFF;
+    --coem-text-main: #1A1F36;
+    --coem-text-muted: #697386;
+    /* Variables Estructurales */
+    --sidebar-width: 280px;
+    --radius-card: 1.25rem;
+    --shadow-glass: 0 12px 32px rgba(26, 0, 60, 0.05);
 }
 
 body {
-  margin-bottom: 60px;
+    background-color: var(--coem-bg) !important;
+    font-family: 'Open Sans', -apple-system, sans-serif;
+    color: var(--coem-text-main);
+    overflow: hidden; /* Congela el body, el scroll lo hace el main-content */
+}
+
+.app-wrapper {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+/* =========================================================
+   1. LA BÓVEDA (SIDEBAR NAVEGACIÓN)
+   ========================================================= */
+.sidebar {
+    width: var(--sidebar-width);
+    background-color: var(--coem-dark);
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    flex-shrink: 0;
+}
+
+.sidebar-header {
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 20px;
+    background: white;
+}
+
+.menu-category {
+    color: rgba(255,255,255,0.4);
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    padding: 10px 30px;
+}
+
+.nav-link-custom {
+    display: flex;
+    align-items: center;
+    padding: 12px 30px;
+    color: rgba(255,255,255,0.7);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.3s;
+}
+
+    .nav-link-custom i {
+        margin-right: 15px;
+        font-size: 1.1rem;
+    }
+
+    .nav-link-custom:hover {
+        color: white;
+        background: rgba(255,255,255,0.05);
+    }
+
+    .nav-link-custom.active {
+        color: white;
+        background: var(--coem-magenta);
+        border-right: 5px solid var(--coem-red);
+    }
+
+/* Avatar de Entra ID */
+.avatar-container {
+    width: 42px;
+    height: 42px;
+    position: relative;
+}
+
+.avatar-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 12px;
+    object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.2);
+}
+
+.avatar-initials {
+    width: 100%;
+    height: 100%;
+    border-radius: 12px;
+    background: var(--coem-magenta);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+}
+
+/* =========================================================
+   2. EL LIENZO DE TRABAJO (DASHBOARD AREA)
+   ========================================================= */
+.main-content {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 40px 50px; /* Respiración para el diseño de alto nivel */
+}
+
+/* Tarjeta Principal Flotante (Efecto Dribbble) */
+.dribbble-card {
+    background: var(--coem-surface);
+    border: none;
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-glass);
+    padding: 1.75rem;
+    margin-top: 1.5rem;
+}
+
+/* =========================================================
+   3. COMPONENTES DE DATOS (TABLAS, BOTONES Y BADGES)
+   ========================================================= */
+/* Tabla Estilo SaaS Moderno */
+.table-dribbble {
+    border-collapse: separate;
+    border-spacing: 0 8px; /* Separa las filas visualmente */
+    margin-top: -8px;
+}
+
+    .table-dribbble thead th {
+        border: none;
+        color: var(--coem-text-muted);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 0.75rem;
+        padding-bottom: 1rem;
+    }
+
+    .table-dribbble tbody tr {
+        background: transparent;
+        transition: all 0.2s ease;
+    }
+
+        .table-dribbble tbody tr:hover {
+            background: #FFFFFF;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(26, 0, 60, 0.04);
+        }
+
+    .table-dribbble tbody td {
+        border-top: 1px solid #F1F5F9;
+        border-bottom: 1px solid #F1F5F9;
+        padding: 1.25rem 1rem;
+        vertical-align: middle;
+        font-size: 0.875rem;
+    }
+
+        /* Redondeando solo los extremos de las filas para efecto pastilla */
+        .table-dribbble tbody td:first-child {
+            border-left: 1px solid #F1F5F9;
+            border-top-left-radius: 0.75rem;
+            border-bottom-left-radius: 0.75rem;
+        }
+
+        .table-dribbble tbody td:last-child {
+            border-right: 1px solid #F1F5F9;
+            border-top-right-radius: 0.75rem;
+            border-bottom-right-radius: 0.75rem;
+        }
+
+/* Botón Primario COEM */
+.btn-coem-primary {
+    background-color: var(--coem-dark);
+    color: white;
+    border-radius: 0.75rem;
+    padding: 0.6rem 1.25rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+    .btn-coem-primary:hover {
+        background-color: var(--coem-magenta);
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 16px rgba(198, 1, 97, 0.2);
+    }
+
+/* Píldoras de Estado (Badges) */
+.badge-soft-success {
+    background: #E1FCEF;
+    color: #14804A;
+    border: 1px solid rgba(20, 128, 74, 0.1);
+}
+
+.badge-soft-danger {
+    background: #FEF0F0;
+    color: #D1293D;
+    border: 1px solid rgba(209, 41, 61, 0.1);
+}
+
+.badge-soft-dark {
+    background: #F1F5F9;
+    color: var(--coem-dark);
+    border: 1px solid rgba(26, 0, 60, 0.1);
+    font-weight: 600;
 }

@@ -4,6 +4,7 @@ using Coem.Cmp.Infra.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,13 +12,15 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Coem.Cmp.Infra.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260405195502_ZenithZeroTrustSecurity")]
+    partial class ZenithZeroTrustSecurity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.5")
+                .HasAnnotation("ProductVersion", "8.0.2")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -151,10 +154,6 @@ namespace Coem.Cmp.Infra.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
 
-                    b.Property<string>("ChargeType")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -162,12 +161,6 @@ namespace Coem.Cmp.Infra.Migrations
                     b.Property<decimal>("EstimatedCost")
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
-
-                    b.Property<string>("FinOpsCostCenter")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("FinOpsEnvironment")
-                        .HasColumnType("nvarchar(450)");
 
                     b.Property<decimal>("MarkupPercentage")
                         .HasPrecision(5, 4)
@@ -185,10 +178,6 @@ namespace Coem.Cmp.Infra.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Publisher")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<decimal>("Quantity")
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
@@ -197,7 +186,7 @@ namespace Coem.Cmp.Infra.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ResourceName")
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<Guid>("SubscriptionId")
                         .HasColumnType("uniqueidentifier");
@@ -205,21 +194,16 @@ namespace Coem.Cmp.Infra.Migrations
                     b.Property<string>("TagsJson")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int>("TenantId")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("UsageDate")
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FinOpsCostCenter");
+                    b.HasIndex("ResourceName");
 
-                    b.HasIndex("FinOpsEnvironment");
+                    b.HasIndex("UsageDate");
 
-                    b.HasIndex("TenantId", "UsageDate", "SubscriptionId");
-
-                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("TenantId", "UsageDate", "SubscriptionId"), new[] { "BilledCost", "EstimatedCost", "ResourceName", "ChargeType" });
+                    b.HasIndex("SubscriptionId", "UsageDate");
 
                     b.ToTable("ExternalUsageRecords");
                 });
@@ -236,10 +220,6 @@ namespace Coem.Cmp.Infra.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
 
-                    b.Property<string>("ChargeType")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -247,12 +227,6 @@ namespace Coem.Cmp.Infra.Migrations
                     b.Property<decimal>("EstimatedCost")
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
-
-                    b.Property<string>("FinOpsCostCenter")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("FinOpsEnvironment")
-                        .HasColumnType("nvarchar(450)");
 
                     b.Property<decimal>("MarkupPercentage")
                         .HasPrecision(5, 4)
@@ -270,10 +244,6 @@ namespace Coem.Cmp.Infra.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Publisher")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<decimal>("Quantity")
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
@@ -282,7 +252,7 @@ namespace Coem.Cmp.Infra.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ResourceName")
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<Guid>("SubscriptionId")
                         .HasColumnType("uniqueidentifier");
@@ -290,21 +260,16 @@ namespace Coem.Cmp.Infra.Migrations
                     b.Property<string>("TagsJson")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int>("TenantId")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("UsageDate")
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FinOpsCostCenter");
+                    b.HasIndex("ResourceName");
 
-                    b.HasIndex("FinOpsEnvironment");
+                    b.HasIndex("UsageDate");
 
-                    b.HasIndex("TenantId", "UsageDate", "SubscriptionId");
-
-                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("TenantId", "UsageDate", "SubscriptionId"), new[] { "BilledCost", "EstimatedCost", "ResourceName", "ChargeType" });
+                    b.HasIndex("SubscriptionId", "UsageDate");
 
                     b.ToTable("PCUsageRecords");
                 });
@@ -529,9 +494,6 @@ namespace Coem.Cmp.Infra.Migrations
                     b.Property<int>("RoleId")
                         .HasColumnType("int");
 
-                    b.Property<int?>("RoleId1")
-                        .HasColumnType("int");
-
                     b.Property<int?>("TenantId")
                         .HasColumnType("int");
 
@@ -542,8 +504,6 @@ namespace Coem.Cmp.Infra.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("RoleId");
-
-                    b.HasIndex("RoleId1");
 
                     b.HasIndex("TenantId");
 
@@ -573,28 +533,6 @@ namespace Coem.Cmp.Infra.Migrations
                         .IsRequired();
 
                     b.Navigation("Credential");
-                });
-
-            modelBuilder.Entity("Coem.Cmp.Core.Entities.ExternalUsageRecord", b =>
-                {
-                    b.HasOne("Coem.Cmp.Core.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Coem.Cmp.Core.Entities.PCUsageRecord", b =>
-                {
-                    b.HasOne("Coem.Cmp.Core.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("Coem.Cmp.Core.Entities.RolePermission", b =>
@@ -630,14 +568,10 @@ namespace Coem.Cmp.Infra.Migrations
             modelBuilder.Entity("Coem.Cmp.Core.Entities.UserProfile", b =>
                 {
                     b.HasOne("Coem.Cmp.Core.Entities.Role", "Role")
-                        .WithMany()
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Coem.Cmp.Core.Entities.Role", null)
                         .WithMany("Users")
-                        .HasForeignKey("RoleId1");
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.HasOne("Coem.Cmp.Core.Entities.Tenant", "Tenant")
                         .WithMany()

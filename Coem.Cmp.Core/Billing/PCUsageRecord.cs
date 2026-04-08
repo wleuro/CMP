@@ -1,9 +1,8 @@
 ﻿namespace Coem.Cmp.Core.Entities
 {
-    // Hereda toda la estructura de UsageRecordBase
+    // Hereda toda la potencia multi-tenant, FinOps y financiera de la base
     public class PCUsageRecord : UsageRecordBase
     {
-        // Si en el futuro Microsoft Partner Center exige un campo único 
-        // (como el InvoiceId de CSP), lo pones solo aquí.
+        // Limpio. Listo para escalar.
     }
 }
