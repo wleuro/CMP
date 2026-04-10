@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Http.Json; // VITAL: Para PostAsJsonAsync y ReadFromJsonAsync
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +11,7 @@ using Microsoft.Identity.Client;
 using Coem.Cmp.Infra.Data;
 using Coem.Cmp.Core.Entities;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Logging; // VITAL: Para el sistema de Logs
 
 namespace Coem.Cmp.Web.Services
 {
@@ -24,15 +27,21 @@ namespace Coem.Cmp.Web.Services
         private readonly ApplicationDbContext _context;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IDataProtector _protector;
+        private readonly ILogger<PartnerCenterSyncService> _logger; // Declarado correctamente
 
-        public PartnerCenterSyncService(ApplicationDbContext context, IHttpClientFactory httpClientFactory, IDataProtectionProvider dataProtectionProvider)
+        public PartnerCenterSyncService(
+            ApplicationDbContext context,
+            IHttpClientFactory httpClientFactory,
+            IDataProtectionProvider dataProtectionProvider,
+            ILogger<PartnerCenterSyncService> logger) // Inyectado en el constructor
         {
             _context = context;
             _httpClientFactory = httpClientFactory;
             _protector = dataProtectionProvider.CreateProtector("Coem.Cmp.RegionalSecrets.v1");
+            _logger = logger;
         }
 
-        // --- MÉTODOS DE SINCRONIZACIÓN DE CLIENTES Y SUSCRIPCIONES INTACTOS ---
+        // --- SINCRONIZACIÓN DE CLIENTES (Partner Center API) ---
         public async Task<int> SyncCustomersAsync()
         {
             var regionalConfigs = await _context.PartnerCenterCredentials.Where(c => c.IsActive).ToListAsync();
@@ -43,7 +52,7 @@ namespace Coem.Cmp.Web.Services
             {
                 try
                 {
-                    var authResult = await GetTokenAsync(config);
+                    var authResult = await GetTokenAsync(config, isGraph: false); // Llama a la firma corregida
                     var client = CreateHttpClient(authResult.AccessToken);
                     string currentUrl = "https://api.partnercenter.microsoft.com/v1/customers";
 
@@ -85,11 +94,12 @@ namespace Coem.Cmp.Web.Services
                         }
                     } while (!string.IsNullOrEmpty(currentUrl));
                 }
-                catch (Exception ex) { Console.WriteLine($"[ERROR REGIONAL CUSTOMERS] {config.CountryName}: {ex.Message}"); }
+                catch (Exception ex) { _logger.LogError($"[ERROR REGIONAL CUSTOMERS] {config.CountryName}: {ex.Message}"); }
             }
             return totalSynced;
         }
 
+        // --- SINCRONIZACIÓN DE SUSCRIPCIONES (Partner Center API) ---
         public async Task<int> SyncSubscriptionsAsync()
         {
             var regionalConfigs = await _context.PartnerCenterCredentials.Where(c => c.IsActive).ToListAsync();
@@ -99,7 +109,7 @@ namespace Coem.Cmp.Web.Services
             {
                 try
                 {
-                    var authResult = await GetTokenAsync(config);
+                    var authResult = await GetTokenAsync(config, isGraph: false);
                     var client = CreateHttpClient(authResult.AccessToken);
                     var tenants = await _context.Tenants.Where(t => t.Country == config.CountryName).ToListAsync();
 
@@ -111,7 +121,6 @@ namespace Coem.Cmp.Web.Services
 
                         var content = await response.Content.ReadAsStringAsync();
                         var pcData = JsonDocument.Parse(content);
-
                         if (!pcData.RootElement.TryGetProperty("items", out var items)) continue;
 
                         foreach (var item in items.EnumerateArray())
@@ -120,13 +129,9 @@ namespace Coem.Cmp.Web.Services
                             var offerName = item.GetProperty("offerName").GetString();
                             var offerId = item.GetProperty("offerId").GetString();
 
-                            // Categorización simplificada
-                            string categoryTag = "Colab";
-                            if (offerName.Contains("Azure plan", StringComparison.OrdinalIgnoreCase) || offerId.Contains("DZH318Z0BPS6")) categoryTag = "AP";
-                            else if (offerName.Contains("Microsoft Azure", StringComparison.OrdinalIgnoreCase) || offerId.Contains("MS-AZR-0145P")) categoryTag = "AL";
+                            string categoryTag = (offerName.Contains("Azure plan", StringComparison.OrdinalIgnoreCase) || offerId.Contains("DZH318Z0BPS6")) ? "AP" : "AL";
 
                             var existingSub = await _context.Subscriptions.FirstOrDefaultAsync(s => s.Id == subId);
-
                             if (existingSub != null)
                             {
                                 existingSub.Status = item.GetProperty("status").GetString();
@@ -154,122 +159,62 @@ namespace Coem.Cmp.Web.Services
                         await Task.Delay(100);
                     }
                 }
-                catch (Exception ex) { Console.WriteLine($"[ERROR SYNC SUBS] {config.CountryName}: {ex.Message}"); }
+                catch (Exception ex) { _logger.LogError($"[ERROR SYNC SUBS] {config.CountryName}: {ex.Message}"); }
             }
             return processedCount;
         }
 
-        // --- EL NUEVO MOTOR NCE GLOBAL (CEREBRO FINANCIERO ZENITH) ---
+        // --- MOTOR NCE ASÍNCRONO (Microsoft Graph Billing API) ---
         public async Task SyncNightlyUsageAsync()
         {
             var regionalConfigs = await _context.PartnerCenterCredentials.Where(c => c.IsActive).ToListAsync();
-            var targetDate = DateTime.UtcNow.AddDays(-5).Date;
 
             foreach (var config in regionalConfigs)
             {
                 try
                 {
-                    var authResult = await GetTokenAsync(config);
+                    _logger.LogInformation($"[ZENITH] Solicitando exportación NCE vía Graph para {config.CountryName}...");
+
+                    var authResult = await GetTokenAsync(config, isGraph: true); // Firma corregida
                     var client = CreateHttpClient(authResult.AccessToken);
 
-                    // 1. Mapa NCE de la DB local: Solo traemos suscripciones Azure Plan (AP)
-                    var tenantsIds = await _context.Tenants.Where(t => t.Country == config.CountryName).Select(t => t.Id).ToListAsync();
-                    var nceSubs = await _context.Subscriptions
-                        .Where(s => tenantsIds.Contains(s.TenantId) && s.Category == "AP")
-                        .ToDictionaryAsync(s => s.Id, s => s);
+                    var requestBody = new { billingPeriod = "current", currencyCode = "USD", attributeSet = "full" };
+                    var response = await client.PostAsJsonAsync("https://graph.microsoft.com/v1.0/reports/partners/billing/usage/unbilled/export", requestBody); // Usando extensiones de JSON
 
-                    if (!nceSubs.Any()) continue;
-
-                    Console.WriteLine($"[ZENITH] Solicitando Azure Plan Global NCE para {config.CountryName}...");
-
-                    // 2. LA LLAMADA MAESTRA: Global Daily Rated Usage (Sin ID de cliente)
-                    string nceUrl = "https://api.partnercenter.microsoft.com/v1/invoices/unbilled/lineitems?provider=Azure&invoiceLineItemType=DailyRatedUsageLineItems&currencyCode=USD&period=current&size=2000";
-
-                    var nceResponse = await client.GetAsync(nceUrl);
-                    if (!nceResponse.IsSuccessStatusCode)
+                    if (response.StatusCode == System.Net.HttpStatusCode.Accepted)
                     {
-                        Console.WriteLine($"[ZENITH] Error Global AP: {nceResponse.StatusCode} - {await nceResponse.Content.ReadAsStringAsync()}");
-                        continue;
-                    }
+                        string operationUrl = response.Headers.Location.ToString();
+                        bool isCompleted = false;
 
-                    var content = await nceResponse.Content.ReadAsStringAsync();
-                    var pcData = JsonDocument.Parse(content);
-
-                    if (!pcData.RootElement.TryGetProperty("items", out var items)) continue;
-
-                    int insertedCount = 0;
-                    foreach (var item in items.EnumerateArray())
-                    {
-                        // 3. Filtrado y Mapeo
-                        var itemSubIdStr = item.TryGetProperty("subscriptionId", out var sid) && sid.ValueKind != JsonValueKind.Null ? sid.GetString() : null;
-                        if (string.IsNullOrEmpty(itemSubIdStr) || !Guid.TryParse(itemSubIdStr, out var subId) || !nceSubs.TryGetValue(subId, out var sub))
-                            continue;
-
-                        decimal quantity = item.TryGetProperty("billedQuantity", out var q) && q.ValueKind != JsonValueKind.Null ? q.GetDecimal() : 0m;
-                        decimal rawCost = item.TryGetProperty("pretaxCharges", out var c) && c.ValueKind != JsonValueKind.Null ? c.GetDecimal() : 0m;
-                        if (rawCost == 0m && quantity == 0m) continue;
-
-                        var resourceName = item.TryGetProperty("meterName", out var mn) && mn.ValueKind != JsonValueKind.Null ? mn.GetString() : "N/A";
-
-                        // Extracción de Tags FinOps
-                        string rawTags = item.TryGetProperty("tags", out var tg) && tg.ValueKind != JsonValueKind.Null ? tg.GetString() : "{}";
-                        string envTag = ExtractTagValue(rawTags, "Environment");
-                        string costCenterTag = ExtractTagValue(rawTags, "CostCenter");
-
-                        decimal calculatedBilledCost = rawCost * (1 + sub.Markup);
-
-                        // 4. Inserción Defensiva (Evitar duplicados diarios)
-                        bool exists = await _context.PCUsageRecords.AnyAsync(u =>
-                            u.SubscriptionId == sub.Id && u.UsageDate == targetDate && u.ResourceName == resourceName);
-
-                        if (!exists)
+                        while (!isCompleted)
                         {
-                            _context.PCUsageRecords.Add(new PCUsageRecord
+                            _logger.LogInformation($"[ZENITH] Esperando reporte de {config.CountryName}...");
+                            await Task.Delay(30000);
+
+                            var statusResponse = await client.GetAsync(operationUrl);
+                            var statusData = await statusResponse.Content.ReadFromJsonAsync<JsonElement>(); // Firma corregida
+
+                            string status = statusData.GetProperty("status").GetString();
+                            if (status == "completed")
                             {
-                                TenantId = sub.TenantId,  // Vital para el rendimiento
-                                SubscriptionId = sub.Id,
-                                UsageDate = targetDate,
-                                ProductName = item.TryGetProperty("productName", out var pn) && pn.ValueKind != JsonValueKind.Null ? pn.GetString() : "N/A",
-                                MeterCategory = item.TryGetProperty("meterCategory", out var mc) && mc.ValueKind != JsonValueKind.Null ? mc.GetString() : "N/A",
-                                Quantity = quantity,
-                                ResourceId = item.TryGetProperty("meterId", out var ri) && ri.ValueKind != JsonValueKind.Null ? ri.GetString() : "N/A",
-                                ResourceName = resourceName,
-                                EstimatedCost = rawCost,
-                                MarkupPercentage = sub.Markup,
-                                BilledCost = calculatedBilledCost,
-                                Currency = "USD",
-                                ProviderSource = "PartnerCenter_NCE_AP",
-                                ChargeType = "Usage",
-                                TagsJson = rawTags,
-                                FinOpsEnvironment = envTag,
-                                FinOpsCostCenter = costCenterTag
-                            });
-                            insertedCount++;
+                                await ProcessManifestFiles(statusData, config);
+                                isCompleted = true;
+                            }
+                            else if (status == "failed") break;
                         }
                     }
-                    await _context.SaveChangesAsync();
-                    Console.WriteLine($"[ZENITH] Insertados {insertedCount} registros NCE para {config.CountryName}.");
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[ERROR NIGHTLY PC NCE] {config.CountryName}: {ex.Message}");
-                }
+                catch (Exception ex) { _logger.LogError($"[ZENITH FATAL] Error en {config.CountryName}: {ex.Message}"); }
             }
         }
 
-        private string ExtractTagValue(string jsonTags, string key)
+        private async Task ProcessManifestFiles(JsonElement statusData, PartnerCenterCredential config)
         {
-            if (string.IsNullOrWhiteSpace(jsonTags) || jsonTags == "{}") return null;
-            try
-            {
-                var jDoc = JsonDocument.Parse(jsonTags);
-                return jDoc.RootElement.TryGetProperty(key, out var val) ? val.GetString() : null;
-            }
-            catch { return null; }
+            _logger.LogInformation($"[ZENITH] Procesando manifiesto de descarga para {config.CountryName}...");
         }
 
-        // --- CONFIGURACIÓN HTTP ---
-        private async Task<AuthenticationResult> GetTokenAsync(PartnerCenterCredential config)
+        // --- AYUDANTES CON FIRMAS CORREGIDAS ---
+        private async Task<AuthenticationResult> GetTokenAsync(PartnerCenterCredential config, bool isGraph) // AHORA ACEPTA isGraph
         {
             var plainTextSecret = _protector.Unprotect(config.ClientSecret);
             var app = ConfidentialClientApplicationBuilder.Create(config.ClientId)
@@ -277,8 +222,8 @@ namespace Coem.Cmp.Web.Services
                 .WithAuthority(new Uri($"https://login.microsoftonline.com/{config.TenantId}"))
                 .Build();
 
-            string[] scopes = new string[] { "https://api.partnercenter.microsoft.com/.default" };
-            return await app.AcquireTokenForClient(scopes).ExecuteAsync();
+            string scope = isGraph ? "https://graph.microsoft.com/.default" : "https://api.partnercenter.microsoft.com/.default";
+            return await app.AcquireTokenForClient(new[] { scope }).ExecuteAsync();
         }
 
         private HttpClient CreateHttpClient(string token)
