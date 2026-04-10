@@ -40,7 +40,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // =========================================================================
 builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"))
-    .EnableTokenAcquisitionToCallDownstreamApi(new string[] { "User.Read", "PartnerBilling.Read.All" })
+    // AQUÍ ESTABA EL ERROR MORTAL. SE REMOVIÓ PartnerBilling.Read.All.
+    .EnableTokenAcquisitionToCallDownstreamApi(new string[] { "User.Read" })
     .AddMicrosoftGraph()
     .AddInMemoryTokenCaches();
 
