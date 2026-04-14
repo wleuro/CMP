@@ -1,0 +1,126 @@
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Identity.Web;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Net.Http;
+using System.Threading.Tasks;
+
+namespace Coem.Cmp.Web.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class ProfileController : ControllerBase
+    {
+        private readonly ITokenAcquisition _tokenAcquisition;
+        private readonly ILogger<ProfileController> _logger;
+        private readonly IHttpClientFactory _httpClientFactory;
+
+        public ProfileController(
+            ITokenAcquisition tokenAcquisition,
+            ILogger<ProfileController> logger,
+            IHttpClientFactory httpClientFactory)
+        {
+            _tokenAcquisition = tokenAcquisition;
+            _logger = logger;
+            _httpClientFactory = httpClientFactory;
+        }
+
+        /// <summary>
+        /// Obtiene la foto del usuario autenticado desde Microsoft Graph
+        /// Usa el token del usuario actual para acceder a su propia foto
+        /// </summary>
+        [HttpGet("photo")]
+        [Authorize]
+        public async Task<IActionResult> GetPhoto()
+        {
+            try
+            {
+                _logger.LogInformation("[ProfileController.GetPhoto] Iniciando obtención de foto");
+
+                // Obtener el token del usuario actual solo para User.Read scope
+                string accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(
+                    new[] { "User.Read" },
+                    tokenAcquisitionOptions: new TokenAcquisitionOptions
+                    {
+                        ForceRefresh = false,
+                        Tenant = User.GetTenantId()
+                    });
+
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    _logger.LogError("[ProfileController.GetPhoto] No se pudo obtener token de acceso");
+                    return Unauthorized(new { error = "No access token" });
+                }
+
+                _logger.LogInformation("[ProfileController.GetPhoto] Token obtenido, solicitando foto a Graph");
+
+                // Hacer solicitud directa a Microsoft Graph con el token
+                using (var httpClient = _httpClientFactory.CreateClient())
+                {
+                    httpClient.DefaultRequestHeaders.Authorization = 
+                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+                    // Endpoint para obtener la foto del usuario
+                    var response = await httpClient.GetAsync("https://graph.microsoft.com/v1.0/me/photo/$value");
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var photoBytes = await response.Content.ReadAsAsync<byte[]>();
+                        _logger.LogInformation($"[ProfileController.GetPhoto] Foto obtenida. Tamaño: {photoBytes?.Length ?? 0} bytes");
+                        
+                        if (photoBytes?.Length > 0)
+                        {
+                            return File(photoBytes, "image/jpeg", "avatar.jpg");
+                        }
+                    }
+                    else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    {
+                        _logger.LogInformation("[ProfileController.GetPhoto] Usuario no tiene foto (404)");
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"[ProfileController.GetPhoto] Graph retornó: {response.StatusCode}");
+                    }
+                }
+
+                return NotFound();
+            }
+            catch (MsalUiRequiredException ex)
+            {
+                _logger.LogWarning($"[ProfileController.GetPhoto] Se necesita UI para consentimiento: {ex.Message}");
+                return Unauthorized(new { error = "Consent required" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"[ProfileController.GetPhoto] Error: {ex.GetType().Name} - {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Endpoint de debugging - información del usuario autenticado
+        /// </summary>
+        [HttpGet("debug")]
+        [Authorize]
+        public IActionResult GetDebugInfo()
+        {
+            try
+            {
+                return Ok(new
+                {
+                    authenticated = User.Identity?.IsAuthenticated ?? false,
+                    name = User.Identity?.Name,
+                    displayName = User.GetDisplayName(),
+                    objectId = User.GetObjectId(),
+                    tenantId = User.GetTenantId(),
+                    claimsCount = User.Claims.Count()
+                });
+            }
+            catch (Exception ex)
+            {
+                return Ok(new { error = ex.Message });
+            }
+        }
+    }
+}

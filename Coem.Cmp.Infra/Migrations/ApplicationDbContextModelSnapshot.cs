@@ -59,6 +59,35 @@ namespace Coem.Cmp.Infra.Migrations
                     b.ToTable("AzureDirectCredentials");
                 });
 
+            modelBuilder.Entity("Coem.Cmp.Core.Entities.CategoryMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CategoryCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Keyword")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CategoryMappings");
+                });
+
             modelBuilder.Entity("Coem.Cmp.Core.Entities.CostRecord", b =>
                 {
                     b.Property<long>("Id")
@@ -529,9 +558,6 @@ namespace Coem.Cmp.Infra.Migrations
                     b.Property<int>("RoleId")
                         .HasColumnType("int");
 
-                    b.Property<int?>("RoleId1")
-                        .HasColumnType("int");
-
                     b.Property<int?>("TenantId")
                         .HasColumnType("int");
 
@@ -542,8 +568,6 @@ namespace Coem.Cmp.Infra.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("RoleId");
-
-                    b.HasIndex("RoleId1");
 
                     b.HasIndex("TenantId");
 
@@ -630,14 +654,10 @@ namespace Coem.Cmp.Infra.Migrations
             modelBuilder.Entity("Coem.Cmp.Core.Entities.UserProfile", b =>
                 {
                     b.HasOne("Coem.Cmp.Core.Entities.Role", "Role")
-                        .WithMany()
+                        .WithMany("Users")
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.HasOne("Coem.Cmp.Core.Entities.Role", null)
-                        .WithMany("Users")
-                        .HasForeignKey("RoleId1");
 
                     b.HasOne("Coem.Cmp.Core.Entities.Tenant", "Tenant")
                         .WithMany()

@@ -1,0 +1,23 @@
+﻿using System;
+using System.ComponentModel.DataAnnotations;
+
+namespace Coem.Cmp.Core.Entities
+{
+    public class CategoryMapping
+    {
+        [Key]
+        public int Id { get; set; }
+
+        [Required]
+        [MaxLength(100)]
+        public required string Keyword { get; set; } // Ejemplo: "INTUNE", "AZURE PLAN", "VISIO"
+
+        [Required]
+        [MaxLength(20)]
+        public required string CategoryCode { get; set; } // Ejemplo: "M365", "AP", "INFRA"
+
+        public int Priority { get; set; } // El orden de evaluación (1 se evalúa antes que 10)
+
+        public bool IsActive { get; set; } = true;
+    }
+}

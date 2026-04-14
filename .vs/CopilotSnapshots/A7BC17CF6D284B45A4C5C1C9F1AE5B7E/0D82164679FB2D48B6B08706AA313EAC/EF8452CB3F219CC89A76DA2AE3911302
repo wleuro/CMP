@@ -1,0 +1,104 @@
+﻿using Coem.Cmp.Core.Entities;
+using Coem.Cmp.Infra.Data;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
+
+namespace Coem.Cmp.Web.Areas.Admin.Controllers
+{
+    [Area("Admin")]
+    [Route("Admin/CategoryMappings")]
+    public class CategoryMappingsController : Controller
+    {
+        private readonly ApplicationDbContext _context;
+
+        public CategoryMappingsController(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        [HttpGet("")]
+        public async Task<IActionResult> Index()
+        {
+            var rules = await _context.CategoryMappings
+                .OrderBy(c => c.Priority)
+                .ToListAsync();
+            return View(rules);
+        }
+
+        [HttpGet("Create")]
+        public IActionResult Create()
+        {
+            // Sugerimos una prioridad por defecto (al final de la lista)
+            int nextPriority = _context.CategoryMappings.Any()
+                ? _context.CategoryMappings.Max(c => c.Priority) + 1
+                : 1;
+
+            return View(new CategoryMapping 
+            { 
+                Priority = nextPriority, 
+                IsActive = true,
+                Keyword = string.Empty,
+                CategoryCode = string.Empty
+            });
+        }
+
+        [HttpPost("Create")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Create(CategoryMapping mapping)
+        {
+            if (ModelState.IsValid)
+            {
+                mapping.Keyword = mapping.Keyword.ToUpperInvariant().Trim();
+                mapping.CategoryCode = mapping.CategoryCode.ToUpperInvariant().Trim();
+
+                _context.Add(mapping);
+                await _context.SaveChangesAsync();
+                TempData["SuccessMessage"] = "Regla de clasificación creada exitosamente.";
+                return RedirectToAction(nameof(Index));
+            }
+            return View(mapping);
+        }
+
+        [HttpGet("Edit/{id}")]
+        public async Task<IActionResult> Edit(int id)
+        {
+            var mapping = await _context.CategoryMappings.FindAsync(id);
+            if (mapping == null) return NotFound();
+            return View(mapping);
+        }
+
+        [HttpPost("Edit/{id}")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(int id, CategoryMapping mapping)
+        {
+            if (id != mapping.Id) return BadRequest();
+
+            if (ModelState.IsValid)
+            {
+                mapping.Keyword = mapping.Keyword.ToUpperInvariant().Trim();
+                mapping.CategoryCode = mapping.CategoryCode.ToUpperInvariant().Trim();
+
+                _context.Update(mapping);
+                await _context.SaveChangesAsync();
+                TempData["SuccessMessage"] = "Regla actualizada correctamente.";
+                return RedirectToAction(nameof(Index));
+            }
+            return View(mapping);
+        }
+
+        [HttpPost("ToggleStatus/{id}")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ToggleStatus(int id)
+        {
+            var mapping = await _context.CategoryMappings.FindAsync(id);
+            if (mapping != null)
+            {
+                mapping.IsActive = !mapping.IsActive;
+                await _context.SaveChangesAsync();
+                TempData["SuccessMessage"] = mapping.IsActive ? "Regla activada." : "Regla desactivada.";
+            }
+            return RedirectToAction(nameof(Index));
+        }
+    }
+}

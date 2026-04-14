@@ -1,0 +1,133 @@
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Coem.Cmp.Infra.Data;
+using Coem.Cmp.Core.Entities;
+using Microsoft.Identity.Client;
+using Microsoft.AspNetCore.DataProtection;
+using System.Net.Http.Headers; // REQUERIDO PARA LA PRUEBA FINANCIERA
+
+namespace Coem.Cmp.Web.Areas.Admin.Controllers
+{
+    [Area("Admin")]
+    [Route("Admin/Countries")]
+    public class CountriesController : Controller
+    {
+        private readonly ApplicationDbContext _context;
+        private readonly IDataProtector _protector;
+
+        public CountriesController(ApplicationDbContext context, IDataProtectionProvider dataProtectionProvider)
+        {
+            _context = context;
+            _protector = dataProtectionProvider.CreateProtector("Coem.Cmp.RegionalSecrets.v1");
+        }
+
+        [HttpGet("")]
+        public async Task<IActionResult> Index()
+        {
+            var credentials = await _context.PartnerCenterCredentials.ToListAsync();
+            return View(credentials);
+        }
+
+        [HttpGet("Get/{id}")]
+        public async Task<IActionResult> GetCountry(int id)
+        {
+            var cred = await _context.PartnerCenterCredentials.FindAsync(id);
+            if (cred == null) return NotFound();
+
+            cred.ClientSecret = "";
+            return Json(cred);
+        }
+
+        [HttpPost("Save")]
+        public async Task<IActionResult> Save(PartnerCenterCredential model)
+        {
+            if (model.Id == 0)
+            {
+                model.ClientSecret = _protector.Protect(model.ClientSecret);
+
+                _context.Add(model);
+                TempData["Message"] = $"✅ Llaves de {model.CountryName} registradas y encriptadas correctamente.";
+            }
+            else
+            {
+                var existing = await _context.PartnerCenterCredentials.FindAsync(model.Id);
+                if (existing != null)
+                {
+                    existing.CountryName = model.CountryName;
+                    existing.MpnId = model.MpnId;
+                    existing.TenantId = model.TenantId;
+                    existing.ClientId = model.ClientId;
+                    existing.IsActive = model.IsActive;
+
+                    if (!string.IsNullOrEmpty(model.ClientSecret))
+                    {
+                        existing.ClientSecret = _protector.Protect(model.ClientSecret);
+                    }
+
+                    _context.Update(existing);
+                    TempData["Message"] = $"✅ Configuración de {model.CountryName} actualizada.";
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Index));
+        }
+
+        // =========================================================================
+        // EL NUEVO RADAR DE CONEXIÓN: Token + Permisos Financieros
+        // =========================================================================
+        [HttpPost("TestConnection/{id}")]
+        public async Task<IActionResult> TestConnection(int id)
+        {
+            var cred = await _context.PartnerCenterCredentials.FindAsync(id);
+            if (cred == null) return NotFound();
+
+            try
+            {
+                // FASE 1: Autenticación
+                var plainTextSecret = _protector.Unprotect(cred.ClientSecret);
+
+                var app = ConfidentialClientApplicationBuilder.Create(cred.ClientId)
+                    .WithClientSecret(plainTextSecret)
+                    .WithAuthority(new Uri($"https://login.microsoftonline.com/{cred.TenantId}"))
+                    .Build();
+
+                string[] scopes = new string[] { "https://api.partnercenter.microsoft.com/.default" };
+                var authResult = await app.AcquireTokenForClient(scopes).ExecuteAsync();
+
+                // FASE 2: Autorización (Lectura de Facturación)
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authResult.AccessToken);
+
+                var response = await client.GetAsync("https://api.partnercenter.microsoft.com/v1/invoices");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return Json(new { success = true, message = $"✅ {cred.CountryName}: Token obtenido y permisos de Admin Agent validados." });
+                }
+                else
+                {
+                    return Json(new { success = false, message = $"⚠️ {cred.CountryName}: Autenticado, pero ACCESO DENEGADO. Revisa los permisos en Partner Center." });
+                }
+            }
+            catch (Exception ex)
+            {
+                var logger = _logger ?? new System.Diagnostics.Debug();
+                // Log the exception but return user-friendly message
+                return Json(new { success = false, message = $"❌ {cred.CountryName}: Error de credenciales. Revisa la llave o el Tenant." });
+            }
+        }
+
+        [HttpPost("Delete/{id}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var cred = await _context.PartnerCenterCredentials.FindAsync(id);
+            if (cred == null) return Json(new { success = false, message = "Registro no encontrado." });
+
+            _context.PartnerCenterCredentials.Remove(cred);
+            await _context.SaveChangesAsync();
+
+            return Json(new { success = true, message = $"País {cred.CountryName} eliminado de la base de datos." });
+        }
+    }
+}

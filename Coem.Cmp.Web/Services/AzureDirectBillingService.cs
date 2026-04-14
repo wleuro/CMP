@@ -1,10 +1,11 @@
-﻿using System.Net.Http.Headers;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Client;
 using Coem.Cmp.Infra.Data;
 using Coem.Cmp.Core.Entities;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Logging;
 
 namespace Coem.Cmp.Web.Services
 {
@@ -19,12 +20,23 @@ namespace Coem.Cmp.Web.Services
         private readonly ApplicationDbContext _context;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IDataProtector _protector;
+        private readonly ILogger<AzureDirectBillingService> _logger;
 
-        public AzureDirectBillingService(ApplicationDbContext context, IHttpClientFactory httpClientFactory, IDataProtectionProvider dataProtectionProvider)
+        public AzureDirectBillingService(
+            ApplicationDbContext context, 
+            IHttpClientFactory httpClientFactory, 
+            IDataProtectionProvider dataProtectionProvider,
+            ILogger<AzureDirectBillingService> logger)
         {
+            ArgumentNullException.ThrowIfNull(context);
+            ArgumentNullException.ThrowIfNull(httpClientFactory);
+            ArgumentNullException.ThrowIfNull(dataProtectionProvider);
+            ArgumentNullException.ThrowIfNull(logger);
+
             _context = context;
             _httpClientFactory = httpClientFactory;
             _protector = dataProtectionProvider.CreateProtector("Coem.Cmp.RegionalSecrets.v1");
+            _logger = logger;
         }
 
         // 1. MOTOR DE DESCUBRIMIENTO Y AUDITORÍA
@@ -34,7 +46,7 @@ namespace Coem.Cmp.Web.Services
 
             if (!directConfigs.Any())
             {
-                Console.WriteLine("[DIRECT-ARM] No hay credenciales configuradas.");
+                _logger.LogInformation("[DIRECT-ARM] No hay credenciales configuradas.");
                 return 0;
             }
 
@@ -42,7 +54,7 @@ namespace Coem.Cmp.Web.Services
 
             foreach (var config in directConfigs)
             {
-                Console.WriteLine($"[DIRECT-ARM] Auditando entorno: {config.Alias}");
+                _logger.LogInformation($"[DIRECT-ARM] Auditando entorno: {config.Alias}");
 
                 try
                 {
@@ -51,7 +63,7 @@ namespace Coem.Cmp.Web.Services
 
                     if (!response.IsSuccessStatusCode)
                     {
-                        Console.WriteLine($"[ERROR DIRECT-ARM] Fallo al consultar {config.Alias}: HTTP {response.StatusCode}");
+                        _logger.LogError($"[ERROR DIRECT-ARM] Fallo al consultar {config.Alias}: HTTP {response.StatusCode}");
                         continue;
                     }
 
@@ -60,13 +72,16 @@ namespace Coem.Cmp.Web.Services
 
                     foreach (var item in items.EnumerateArray())
                     {
-                        var subId = Guid.Parse(item.GetProperty("subscriptionId").GetString());
-                        var displayName = item.GetProperty("displayName").GetString();
-                        var state = item.GetProperty("state").GetString();
+                        var subIdStr = item.GetProperty("subscriptionId").GetString();
+                        if (string.IsNullOrEmpty(subIdStr)) continue;
+                        
+                        var subId = Guid.Parse(subIdStr);
+                        var displayName = item.GetProperty("displayName").GetString() ?? "Unknown";
+                        var state = item.GetProperty("state").GetString() ?? "Unknown";
 
                         // --- PRUEBA ÁCIDA DE PERMISOS ---
-                        var costPing = await client.GetAsync($"https://management.azure.com/subscriptions/{subId}/providers/Microsoft.Consumption/usageDetails?$top=1&api-version=2023-11-01");
-                        var readPing = await client.GetAsync($"https://management.azure.com/subscriptions/{subId}/resources?$top=1&api-version=2021-04-01");
+                        var costPing = await client.GetAsync($"https://management.azure.com/subscriptions/{subIdStr}/providers/Microsoft.Consumption/usageDetails?$top=1&api-version=2023-11-01");
+                        var readPing = await client.GetAsync($"https://management.azure.com/subscriptions/{subIdStr}/resources?$top=1&api-version=2021-04-01");
                         var auditStr = $"Cost:{(costPing.IsSuccessStatusCode ? "OK" : "FAIL")}|Read:{(readPing.IsSuccessStatusCode ? "OK" : "FAIL")}";
 
                         // --- GUARDADO EN EL SILO EXTERNO ---
@@ -98,7 +113,7 @@ namespace Coem.Cmp.Web.Services
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR CRITICO ARM] {config.Alias}: {ex.Message}");
+                    _logger.LogCritical($"[ERROR CRITICO ARM] {config.Alias}: {ex.Message}");
                 }
             }
             return processedCount;
@@ -139,7 +154,7 @@ namespace Coem.Cmp.Web.Services
                                 foreach (var record in records.EnumerateArray())
                                 {
                                     var props = record.GetProperty("properties");
-                                    var productName = props.GetProperty("product").GetString();
+                                    var productName = props.GetProperty("product").GetString() ?? "Unknown";
                                     var rawCost = props.GetProperty("costInBillingCurrency").GetDecimal();
 
                                     // LA MATEMÁTICA DEL MARGEN (Tu rentabilidad en COEM)
@@ -153,17 +168,20 @@ namespace Coem.Cmp.Web.Services
 
                                     if (!exists)
                                     {
+                                        var meterCategory = props.GetProperty("meterCategory").GetString() ?? "Unknown";
+                                        var billingCurrency = props.GetProperty("billingCurrencyCode").GetString() ?? "USD";
+                                        
                                         _context.ExternalUsageRecords.Add(new ExternalUsageRecord
                                         {
                                             SubscriptionId = sub.Id,
                                             UsageDate = targetDate,
                                             ProductName = productName,
-                                            MeterCategory = props.GetProperty("meterCategory").GetString(),
+                                            MeterCategory = meterCategory,
                                             Quantity = props.GetProperty("quantity").GetDecimal(),
                                             EstimatedCost = rawCost,             // Lo que cobra Azure
                                             MarkupPercentage = sub.Markup,       // El % aplicado ese día
                                             BilledCost = calculatedBilledCost,   // Lo que facturas/muestras
-                                            Currency = props.GetProperty("billingCurrencyCode").GetString(),
+                                            Currency = billingCurrency,
                                             ProviderSource = "BYOT_EA"
                                         });
                                     }
@@ -175,7 +193,7 @@ namespace Coem.Cmp.Web.Services
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[NIGHTLY ERROR] {config.Alias}: {ex.Message}");
+                    _logger.LogError($"[NIGHTLY ERROR] {config.Alias}: {ex.Message}");
                 }
             }
         }

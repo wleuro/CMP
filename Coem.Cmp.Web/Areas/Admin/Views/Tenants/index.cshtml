@@ -131,26 +131,36 @@
         </div>
     }
 
-    @* Cuadros de Mando (KPIs) *@
-    <div class="row mb-4 g-3">
-        <div class="col-md-3" onclick="toggleCategoryFilter('AP')">
+    @* Cuadros de Mando (KPIs) - Ajustados a columnas dinámicas para 6 elementos *@
+    <div class="row mb-4 g-2">
+        <div class="col" onclick="toggleCategoryFilter('AP')">
             <div class="card shadow-sm h-100 border-0 rounded-3 kpi-card @(categoryFilter == "AP" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))" style="background-color: #3b82f6; color: white;">
-                <div class="card-body"><h6>Azure Plan (AP)</h6><h1 class="display-5 fw-bold mb-0">@ViewBag.TotalAP</h1></div>
+                <div class="card-body"><h6>Azure Plan (AP)</h6><h2 class="fw-bold mb-0">@ViewBag.TotalAP</h2></div>
             </div>
         </div>
-        <div class="col-md-3" onclick="toggleCategoryFilter('AL')">
+        <div class="col" onclick="toggleCategoryFilter('M365')">
+            <div class="card shadow-sm h-100 border-0 rounded-3 kpi-card @(categoryFilter == "M365" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))" style="background-color: #eab308; color: #1f2937;">
+                <div class="card-body"><h6>Microsoft 365</h6><h2 class="fw-bold mb-0">@ViewBag.TotalM365</h2></div>
+            </div>
+        </div>
+        <div class="col" onclick="toggleCategoryFilter('INFRA')">
+            <div class="card shadow-sm h-100 border-0 rounded-3 kpi-card @(categoryFilter == "INFRA" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))" style="background-color: #6366f1; color: white;">
+                <div class="card-body"><h6>Infraestructura</h6><h2 class="fw-bold mb-0">@ViewBag.TotalInfra</h2></div>
+            </div>
+        </div>
+        <div class="col" onclick="toggleCategoryFilter('DEV')">
+            <div class="card shadow-sm h-100 border-0 rounded-3 kpi-card @(categoryFilter == "DEV" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))" style="background-color: #8b5cf6; color: white;">
+                <div class="card-body"><h6>Desarrollo</h6><h2 class="fw-bold mb-0">@ViewBag.TotalDev</h2></div>
+            </div>
+        </div>
+        <div class="col" onclick="toggleCategoryFilter('AL')">
             <div class="card shadow-sm h-100 border-0 rounded-3 kpi-card @(categoryFilter == "AL" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))" style="background-color: #f97316; color: white;">
-                <div class="card-body"><h6>Legacy (AL)</h6><h1 class="display-5 fw-bold mb-0">@ViewBag.TotalAL</h1></div>
+                <div class="card-body"><h6>Legacy (AL)</h6><h2 class="fw-bold mb-0">@ViewBag.TotalAL</h2></div>
             </div>
         </div>
-        <div class="col-md-3" onclick="toggleCategoryFilter('Colab')">
-            <div class="card shadow-sm h-100 border-0 rounded-3 kpi-card @(categoryFilter == "Colab" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))" style="background-color: #eab308; color: #1f2937;">
-                <div class="card-body"><h6>Colaboración (M365)</h6><h1 class="display-5 fw-bold mb-0">@ViewBag.TotalColab</h1></div>
-            </div>
-        </div>
-        <div class="col-md-3" onclick="toggleCategoryFilter('None')">
+        <div class="col" onclick="toggleCategoryFilter('None')">
             <div class="card shadow-sm h-100 border-0 rounded-3 bg-white kpi-card @(categoryFilter == "None" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))">
-                <div class="card-body"><h6>En revisión</h6><h1 class="display-5 fw-bold mb-0" style="color: #9ca3af;">@ViewBag.EnRevision</h1></div>
+                <div class="card-body"><h6>En revisión</h6><h2 class="fw-bold mb-0" style="color: #9ca3af;">@ViewBag.EnRevision</h2></div>
             </div>
         </div>
     </div>
@@ -217,11 +227,12 @@
                                             string catStyle = group.Key switch
                                             {
                                                 "AP" => "background-color: #3b82f6; color: white;",
+                                                "M365" => "background-color: #eab308; color: #1f2937;",
+                                                "INFRA" => "background-color: #6366f1; color: white;",
+                                                "DEV" => "background-color: #8b5cf6; color: white;",
                                                 "AL" => "background-color: #f97316; color: white;",
-                                                "Colab" => "background-color: #eab308; color: #1f2937;",
-                                                                "INT" => "background-color: #8b5cf6; color: white;", // Púrpura para uso interno
                                                 _ => "background-color: #9ca3af; color: white;"
-                                                        };
+                                            };
 
                                             var subsJson = System.Text.Json.JsonSerializer.Serialize(group.Select(s => new
                                             {
@@ -248,7 +259,7 @@
 </div>
 
 @* ========================================= *@
-@* MODALES DE ADVERTENCIA (RESTAURADOS)      *@
+@* MODALES DE ADVERTENCIA                    *@
 @* ========================================= *@
 
 @* MODAL 1: Sincronizar Identidades *@
@@ -299,7 +310,7 @@
     </div>
 </div>
 
-@* MODAL 3: Detalle Técnico (Tu Motor de FinOps) *@
+@* MODAL 3: Detalle Técnico *@
 <div class="modal fade" id="subDetailModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg">
@@ -342,7 +353,7 @@
             currentSubs = subs;
             const statusPriority = { 'active': 1, 'suspended': 2, 'deleted': 3 };
 
-            // Orden Zenith inicial: Por estado y luego por recencia
+            // Orden inicial: Por estado y luego por recencia
             currentSubs.sort((a, b) => {
                 if (statusPriority[a.status] !== statusPriority[b.status]) {
                     return statusPriority[a.status] - statusPriority[b.status];
@@ -372,7 +383,7 @@
                 html += `
                     <tr>
                         <td class="ps-4 fw-bold text-dark">${s.name}</td>
-                        <td><small class="text-muted" style="font-family:monospace">${s.id}</small></td>
+                        <td class="text-muted" style="font-family:monospace; font-size: 0.85rem;">${s.id}</td>
                         <td class="text-center">${statusBadge}</td>
                         <td class="text-center text-muted">${s.createdDate}</td>
                         <td class="text-center fw-bold pe-4 text-primary">${s.modifiedDate}</td>

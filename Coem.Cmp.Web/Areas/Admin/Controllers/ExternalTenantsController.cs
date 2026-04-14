@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.DataProtection;
 using Coem.Cmp.Infra.Data;
@@ -159,8 +159,10 @@ namespace Coem.Cmp.Web.Controllers.Admin
                         foreach (var item in items.EnumerateArray())
                         {
                             var subIdStr = item.GetProperty("subscriptionId").GetString();
+                            if (string.IsNullOrEmpty(subIdStr)) continue;
+                            
                             var subId = Guid.Parse(subIdStr);
-                            var subName = item.GetProperty("displayName").GetString();
+                            var subName = item.GetProperty("displayName").GetString() ?? "Unknown";
 
                             // --- PRUEBA ÁCIDA DE ROLES ---
                             var costPing = await client.GetAsync($"https://management.azure.com/subscriptions/{subIdStr}/providers/Microsoft.Consumption/usageDetails?$top=1&api-version=2023-11-01");
@@ -170,6 +172,8 @@ namespace Coem.Cmp.Web.Controllers.Admin
 
                             // GUARDADO O ACTUALIZACIÓN EN TABLA EXTERNA
                             var existingSub = await _context.ExternalSubscriptions.FirstOrDefaultAsync(s => s.Id == subId);
+                            var status = item.GetProperty("state").GetString() ?? "Unknown";
+                            
                             if (existingSub == null)
                             {
                                 _context.ExternalSubscriptions.Add(new ExternalSubscription
@@ -177,7 +181,7 @@ namespace Coem.Cmp.Web.Controllers.Admin
                                     Id = subId,
                                     AzureDirectCredentialId = credential.Id,
                                     Name = subName,
-                                    Status = item.GetProperty("state").GetString(),
+                                    Status = status,
                                     AuditResult = auditResult,
                                     LastSync = DateTime.UtcNow
                                 });
@@ -186,7 +190,7 @@ namespace Coem.Cmp.Web.Controllers.Admin
                             {
                                 existingSub.AuditResult = auditResult;
                                 existingSub.Name = subName;
-                                existingSub.Status = item.GetProperty("state").GetString();
+                                existingSub.Status = status;
                                 existingSub.LastSync = DateTime.UtcNow;
                             }
                         }

@@ -1,0 +1,366 @@
+﻿@model IEnumerable<Coem.Cmp.Web.Areas.Admin.ViewModels.UserListViewModel>
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+
+@{
+    ViewData["Title"] = "Directorio de Identidades";
+}
+
+<div class="container-fluid py-4 px-xl-5">
+    
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show border-0 shadow-sm" role="alert" style="border-radius: var(--radius-card); background-color: #E1FCEF; color: #14804A;">
+            <svg width="16" height="16" fill="currentColor" class="me-2 mb-1" viewBox="0 0 16 16"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z" /></svg>
+            @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm" role="alert" style="border-radius: var(--radius-card); background-color: #FEF0F0; color: #D1293D;">
+            <svg width="16" height="16" fill="currentColor" class="me-2 mb-1" viewBox="0 0 16 16"><path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" /></svg>
+            @TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <div class="d-flex justify-content-between align-items-center mb-5">
+        <div>
+            <h2 class="fw-bolder mb-1" style="color: var(--coem-primary); font-size: 1.75rem;">Gestión de Identidades</h2>
+            <p class="mb-0" style="color: var(--coem-text-muted); font-size: 0.9rem;">Control centralizado de silos y accesos administrativos.</p>
+        </div>
+        <div>
+            <button class="btn btn-coem-primary border-0 shadow-sm d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#modalNuevoUsuario">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>
+                Invitar Identidad
+            </button>
+        </div>
+    </div>
+
+    <div class="dribbble-card">
+        
+        <div class="d-flex justify-content-between align-items-center mb-4 px-2">
+            <div class="position-relative" style="width: 300px;">
+                <svg width="16" height="16" fill="none" stroke="#94A3B8" stroke-width="2" class="position-absolute" style="top: 12px; left: 14px;" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg>
+                <input type="text" class="form-control bg-light border-0" placeholder="Buscar usuario o email..." style="border-radius: 0.75rem; padding: 0.55rem 1rem 0.55rem 2.5rem; font-size: 0.875rem; box-shadow: none;">
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-light border-0 text-muted d-flex align-items-center gap-2" style="border-radius: 0.75rem; font-size: 0.875rem;">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 4h18M6 12h12M10 20h4"></path></svg> Filtrar
+                </button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-dribbble w-100">
+                <thead>
+                    <tr>
+                        <th class="ps-4">Perfil & Identidad</th>
+                        <th>Rol de Negocio</th>
+                        <th>Silo (Organización)</th>
+                        <th>Estado</th>
+                        <th class="pe-4 text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="5" class="text-center py-5 text-muted border-0">La bóveda está vacía.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var user in Model)
+                        {
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold" style="width: 42px; height: 42px; background: rgba(26, 0, 60, 0.05); color: var(--coem-primary); font-size: 1.1rem;">
+                                            @(user.DisplayName?.FirstOrDefault().ToString().ToUpper() ?? "?")
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold" style="color: var(--coem-text-main);">@(string.IsNullOrEmpty(user.DisplayName) ? "Pendiente Login" : user.DisplayName)</div>
+                                            <div style="color: var(--coem-text-muted); font-size: 0.8rem; letter-spacing: 0.2px;">@user.Email</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge badge-soft-dark border border-secondary border-opacity-10 rounded-pill px-3 py-2 fw-medium">
+                                        @user.RoleName
+                                    </span>
+                                </td>
+                                <td>
+                                    @if (user.IsInternalTeam)
+                                    {
+                                        <span class="fw-semibold" style="color: var(--coem-primary);">
+                                            <svg width="14" height="14" fill="currentColor" class="me-1 mb-1" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 0c-.69 0-1.843.265-2.928.56-1.11.3-2.229.655-2.887.87a1.54 1.54 0 0 0-1.044 1.262c-.596 4.477.787 7.795 2.465 9.99a11.777 11.777 0 0 0 2.517 2.453c.386.273.744.482 1.048.625.28.132.581.24.829.24s.548-.108.829-.24a7.159 7.159 0 0 0 1.048-.625 11.775 11.775 0 0 0 2.517-2.453c1.678-2.195 3.061-5.513 2.465-9.99a1.541 1.541 0 0 0-1.044-1.263 62.467 62.467 0 0 0-2.887-.87C9.843.266 8.69 0 8 0zm0 5a1.5 1.5 0 0 1 .5 2.915l.385 1.99a.5.5 0 0 1-.491.595h-.788a.5.5 0 0 1-.49-.595l.384-1.99A1.5 1.5 0 0 1 8 5z" /></svg>
+                                            @user.TenantName
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color: var(--coem-text-muted); font-weight: 500;">@user.TenantName</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (user.IsActive)
+                                    {
+                                        <span class="badge badge-soft-success rounded-pill px-3 py-2 fw-medium">Activo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge badge-soft-danger rounded-pill px-3 py-2 fw-medium">Bloqueado</span>
+                                    }
+                                </td>
+                                <td class="pe-4 text-end">
+                                    <button class="btn btn-sm btn-link text-decoration-none fw-medium" style="color: var(--coem-text-muted);" data-bs-toggle="modal" data-bs-target="#modalEditarUsuario" data-user-id="@user.Id" data-role-id="@user.RoleId" data-tenant-id="@user.TenantId" data-display-name="@user.DisplayName">Editar</button>
+                                    <form method="post" asp-action="ToggleStatus" class="d-inline">
+                                        <input type="hidden" name="Id" value="@user.Id" />
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-sm btn-link text-decoration-none fw-medium text-danger" onclick="return confirm('¿Desactiva acceso de @user.DisplayName?');">Revocar</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalNuevoUsuario" tabindex="-1" aria-labelledby="modalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: var(--radius-card);">
+            
+            <div class="modal-header border-bottom-0 pb-0 px-5 pt-4">
+                <div>
+                    <h4 class="modal-title fw-bold" id="modalTitle" style="color: var(--coem-primary);">Inyectar Nueva Identidad</h4>
+                    <p class="text-muted mb-0" style="font-size: 1rem;">El usuario iniciará sesión con sus credenciales nativas de Entra ID.</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form asp-area="Admin" asp-controller="Users" asp-action="Create" method="post">
+                <div class="modal-body px-5 py-4">
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-bold text-muted small text-uppercase">Correo Corporativo (UPN)</label>
+                        <input type="email" name="Upn" class="form-control bg-light border-0 py-2" placeholder="ej. cto@maresa.com" required style="border-radius: 0.5rem; box-shadow: none;">
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <label class="form-label fw-bold text-muted small text-uppercase">Organización (Silo)</label>
+                            
+                            <div class="dropdown w-100">
+                                <button class="form-select bg-light border-0 py-2 text-start d-flex justify-content-between align-items-center" type="button" id="tenantDropdownBtn" data-bs-toggle="dropdown" aria-expanded="false" style="border-radius: 0.5rem; box-shadow: none; color: #495057;">
+                                    <span id="tenantDropdownText" class="text-truncate">Seleccione Organización...</span>
+                                </button>
+                                <div class="dropdown-menu w-100 p-2 border-0 shadow-lg" aria-labelledby="tenantDropdownBtn" style="border-radius: 0.75rem;">
+                                    <input type="text" class="form-control bg-light border-0 mb-2 py-2" id="tenantSearchInput" placeholder="Buscar..." autocomplete="off">
+                                    <div id="tenantOptionsContainer" style="max-height: 350px; overflow-y: auto;">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <input type="hidden" name="TenantId" id="hiddenTenantId" required>
+                        </div>
+
+                        <div class="col-md-6 mb-4">
+                            <label class="form-label fw-bold text-muted small text-uppercase">Rol de Negocio</label>
+                            <select name="RoleId" id="roleSelect" class="form-select bg-light border-0 py-2" required style="border-radius: 0.5rem; box-shadow: none;">
+                                <option value="">Seleccione Organización primero...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                </div>
+                
+                <div class="modal-footer border-top-0 px-5 pb-4">
+                    <button type="button" class="btn btn-light py-2 px-4 fw-semibold" data-bs-dismiss="modal" style="border-radius: 0.5rem; color: var(--coem-text-muted);">Cancelar</button>
+                    <button type="submit" class="btn btn-coem-primary py-2 px-4 shadow-sm">Autorizar Acceso</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL EDITAR USUARIO -->
+<div class="modal fade" id="modalEditarUsuario" tabindex="-1" aria-labelledby="modalEditTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: var(--radius-card);">
+            
+            <div class="modal-header border-bottom-0 pb-0 px-5 pt-4">
+                <div>
+                    <h4 class="modal-title fw-bold" id="modalEditTitle" style="color: var(--coem-primary);">Editar Identidad</h4>
+                    <p class="text-muted mb-0" style="font-size: 1rem;" id="modalEditSubtitle">Actualiza el rol y organización del usuario.</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form asp-area="Admin" asp-controller="Users" asp-action="Edit" method="post">
+                <div class="modal-body px-5 py-4">
+                    
+                    <input type="hidden" name="Id" id="editUserId" />
+
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <label class="form-label fw-bold text-muted small text-uppercase">Organización (Silo)</label>
+                            
+                            <div class="dropdown w-100">
+                                <button class="form-select bg-light border-0 py-2 text-start d-flex justify-content-between align-items-center" type="button" id="editTenantDropdownBtn" data-bs-toggle="dropdown" aria-expanded="false" style="border-radius: 0.5rem; box-shadow: none; color: #495057;">
+                                    <span id="editTenantDropdownText" class="text-truncate">Seleccione Organización...</span>
+                                </button>
+                                <div class="dropdown-menu w-100 p-2 border-0 shadow-lg" aria-labelledby="editTenantDropdownBtn" style="border-radius: 0.75rem;">
+                                    <input type="text" class="form-control bg-light border-0 mb-2 py-2" id="editTenantSearchInput" placeholder="Buscar..." autocomplete="off">
+                                    <div id="editTenantOptionsContainer" style="max-height: 350px; overflow-y: auto;">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <input type="hidden" name="TenantId" id="editHiddenTenantId" required>
+                        </div>
+
+                        <div class="col-md-6 mb-4">
+                            <label class="form-label fw-bold text-muted small text-uppercase">Rol de Negocio</label>
+                            <select name="RoleId" id="editRoleSelect" class="form-select bg-light border-0 py-2" required style="border-radius: 0.5rem; box-shadow: none;">
+                                <option value="">Seleccione Organización primero...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                </div>
+                
+                <div class="modal-footer border-top-0 px-5 pb-4">
+                    <button type="button" class="btn btn-light py-2 px-4 fw-semibold" data-bs-dismiss="modal" style="border-radius: 0.5rem; color: var(--coem-text-muted);">Cancelar</button>
+                    <button type="submit" class="btn btn-coem-primary py-2 px-4 shadow-sm">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const rolesData = @Html.Raw(ViewBag.RolesJson ?? "[]");
+            const tenantsData = @Html.Raw(ViewBag.TenantsJson ?? "[]");
+            
+            const coemMasterTenantId = "@Configuration["AzureAd:TenantId"]".toLowerCase();
+
+            const searchInput = document.getElementById('tenantSearchInput');
+            const optionsContainer = document.getElementById('tenantOptionsContainer');
+            const dropdownText = document.getElementById('tenantDropdownText');
+            const hiddenTenantId = document.getElementById('hiddenTenantId');
+            const roleSelect = document.getElementById('roleSelect');
+
+            function renderTenants(filterText = "") {
+                optionsContainer.innerHTML = '';
+                const lowerFilter = filterText.toLowerCase();
+
+                const filteredTenants = tenantsData.filter(t =>
+                    t.DisplayName.toLowerCase().includes(lowerFilter)
+                );
+
+                if (filteredTenants.length === 0) {
+                    optionsContainer.innerHTML = '<span class="dropdown-item text-muted">No se encontraron resultados</span>';
+                    return;
+                }
+
+                filteredTenants.forEach(t => {
+                    const a = document.createElement('a');
+                    // Retornamos al estándar de letra, pero mantenemos un buen área de clic (py-2)
+                    a.className = 'dropdown-item rounded-2 py-2';
+                    a.href = '#';
+                    a.style.cursor = 'pointer';
+                    
+                    const isCoem = (t.MicrosoftTenantId.toLowerCase() === coemMasterTenantId);
+                    a.innerHTML = isCoem ? `<span class="fw-bold" style="color: var(--coem-primary);">🛡️ ${t.DisplayName}</span>` : t.DisplayName;
+                    
+                    a.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        
+                        dropdownText.textContent = t.DisplayName;
+                        hiddenTenantId.value = t.Id;
+                        
+                        updateRoles(t);
+                    });
+                    optionsContainer.appendChild(a);
+                });
+            }
+
+            function updateRoles(selectedTenant) {
+                roleSelect.innerHTML = '<option value="">Seleccione Rol...</option>';
+
+                const isCoem = (selectedTenant.MicrosoftTenantId.toLowerCase() === coemMasterTenantId);
+
+                rolesData.forEach(role => {
+                    if ((isCoem && !role.IsExternal) || (!isCoem && role.IsExternal)) {
+                        const option = new Option(role.Name, role.Id);
+                        roleSelect.add(option);
+                    }
+                });
+            }
+
+            renderTenants();
+            searchInput.addEventListener('keyup', (e) => renderTenants(e.target.value));
+            searchInput.addEventListener('click', (e) => e.stopPropagation());
+        });
+
+        // Lógica para el modal de edición
+        document.addEventListener('DOMContentLoaded', function () {
+            const editTenantSearchInput = document.getElementById('editTenantSearchInput');
+            const editOptionsContainer = document.getElementById('editTenantOptionsContainer');
+            const editDropdownText = document.getElementById('editTenantDropdownText');
+            const editHiddenTenantId = document.getElementById('editHiddenTenantId');
+            const editRoleSelect = document.getElementById('editRoleSelect');
+
+            // Función para abrir modal de edición y cargar datos del usuario
+            window.openEditModal = function(userId, roleId, tenantId, displayName) {
+                // Asignar valores a los campos del modal
+                document.getElementById('editUserId').value = userId;
+                editDropdownText.textContent = displayName;
+
+                // Lógica para seleccionar el tenant y rol correctos
+                const selectedTenant = @Html.Raw(Json.Serialize(Model.Select(u => new { u.TenantId, u.DisplayName })));
+                const tenantToSelect = selectedTenant.find(t => t.TenantId === tenantId);
+                
+                if (tenantToSelect) {
+                    editDropdownText.textContent = tenantToSelect.DisplayName;
+                    editHiddenTenantId.value = tenantToSelect.TenantId;
+                }
+
+                updateEditRoles(tenantId, roleId);
+
+                // Abrir el modal
+                const modal = new bootstrap.Modal(document.getElementById('modalEditarUsuario'));
+                modal.show();
+            }
+
+            function updateEditRoles(tenantId, selectedRoleId) {
+                editRoleSelect.innerHTML = '<option value="">Seleccione Rol...</option>';
+
+                const isCoem = (tenantId.toLowerCase() === coemMasterTenantId);
+
+                rolesData.forEach(role => {
+                    if ((isCoem && !role.IsExternal) || (!isCoem && role.IsExternal)) {
+                        const option = new Option(role.Name, role.Id);
+                        editRoleSelect.add(option);
+                    }
+                });
+
+                // Seleccionar el rol previamente asignado
+                if (selectedRoleId) {
+                    editRoleSelect.value = selectedRoleId;
+                }
+            }
+
+            renderTenants();
+            editTenantSearchInput.addEventListener('keyup', (e) => renderTenants(e.target.value));
+            editTenantSearchInput.addEventListener('click', (e) => e.stopPropagation());
+        });
+    </script>
+}

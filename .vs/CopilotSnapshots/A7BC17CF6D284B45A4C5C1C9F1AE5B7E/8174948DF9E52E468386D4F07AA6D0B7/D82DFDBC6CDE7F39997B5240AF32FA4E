@@ -1,0 +1,97 @@
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Graph;
+using Microsoft.Identity.Web;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Threading.Tasks;
+
+namespace Coem.Cmp.Web.Controllers
+{
+    [Authorize]
+    [Route("api/[controller]")]
+    public class ProfileController : Controller
+    {
+        private readonly GraphServiceClient _graphServiceClient;
+        private readonly ILogger<ProfileController> _logger;
+        private readonly ITokenAcquisition _tokenAcquisition;
+
+        public ProfileController(
+            GraphServiceClient graphServiceClient, 
+            ILogger<ProfileController> logger,
+            ITokenAcquisition tokenAcquisition)
+        {
+            _graphServiceClient = graphServiceClient;
+            _logger = logger;
+            _tokenAcquisition = tokenAcquisition;
+        }
+
+        [HttpGet("photo")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetPhoto()
+        {
+            try
+            {
+                var userPrincipalName = User.GetDisplayName() ?? User.Identity?.Name;
+                
+                _logger.LogInformation($"Obteniendo foto para usuario: {userPrincipalName}");
+
+                // Intentar obtener la foto del usuario autenticado
+                var photoStream = await _graphServiceClient.Me.Photo.Content.GetAsync();
+
+                if (photoStream != null && photoStream.Length > 0)
+                {
+                    _logger.LogInformation($"Foto obtenida exitosamente. Tamaño: {photoStream.Length} bytes");
+                    return File(photoStream, "image/jpeg", "avatar.jpg");
+                }
+
+                _logger.LogWarning("El stream de foto está vacío o es nulo");
+                return NotFound();
+            }
+            catch (Microsoft.Graph.Models.ODataErrors.ODataError graphError) when (graphError.Error?.Code == "ImageNotFound")
+            {
+                _logger.LogInformation($"Usuario no tiene foto establecida: {graphError.Error.Message}");
+                return NotFound();
+            }
+            catch (Microsoft.Graph.Models.ODataErrors.ODataError graphError)
+            {
+                _logger.LogError($"Error de Graph: {graphError.Error?.Code} - {graphError.Error?.Message}");
+                return StatusCode(500, new { error = graphError.Error?.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error inesperado al obtener foto: {ex.GetType().Name} - {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        // Endpoint alternativo sin requiere autenticación (para debugging)
+        [HttpGet("photo-debug")]
+        [AllowAnonymous]
+        public IActionResult GetPhotoDebug()
+        {
+            try
+            {
+                var claims = User.Claims;
+                var claimsList = new System.Collections.Generic.Dictionary<string, string>();
+                
+                foreach (var claim in claims)
+                {
+                    claimsList[claim.Type] = claim.Value;
+                }
+
+                return Json(new
+                {
+                    authenticated = User.Identity?.IsAuthenticated ?? false,
+                    name = User.Identity?.Name,
+                    displayName = User.GetDisplayName(),
+                    claims = claimsList
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { error = ex.Message });
+            }
+        }
+    }
+}

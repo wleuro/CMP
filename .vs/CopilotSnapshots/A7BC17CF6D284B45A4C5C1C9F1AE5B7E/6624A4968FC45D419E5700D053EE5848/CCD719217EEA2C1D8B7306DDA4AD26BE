@@ -1,0 +1,57 @@
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Graph;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Threading.Tasks;
+
+namespace Coem.Cmp.Web.Controllers
+{
+    [Authorize]
+    public class ProfileController : Controller
+    {
+        private readonly GraphServiceClient _graphServiceClient;
+        private readonly ILogger<ProfileController> _logger;
+
+        public ProfileController(GraphServiceClient graphServiceClient, ILogger<ProfileController> logger)
+        {
+            _graphServiceClient = graphServiceClient;
+            _logger = logger;
+        }
+
+        [HttpGet]
+        [ResponseCache(Duration = 3600, VaryByHeader = "Authorization")] // Cache por 1 hora
+        public async Task<IActionResult> GetPhoto()
+        {
+            try
+            {
+                // Obtener la foto del usuario autenticado desde Microsoft Graph
+                var photoStream = await _graphServiceClient.Me.Photo.Content.GetAsync();
+
+                if (photoStream != null)
+                {
+                    _logger.LogInformation("Foto del usuario obtenida correctamente desde Graph");
+                    return File(photoStream, "image/jpeg");
+                }
+
+                _logger.LogWarning("El usuario no tiene foto en su perfil de Entra ID");
+            }
+            catch (ServiceException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _logger.LogInformation("Foto del usuario no encontrada. El usuario no ha establecido una foto de perfil.");
+            }
+            catch (ServiceException ex)
+            {
+                _logger.LogError($"Error al obtener foto del usuario desde Graph: {ex.Message}. Status Code: {ex.StatusCode}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error inesperado al obtener foto del usuario: {ex.Message}");
+            }
+
+            // Retorna un 404 cuando no hay foto disponible
+            // El frontend ya está configurado para mostrar un fallback con iniciales del usuario
+            return NotFound();
+        }
+    }
+}

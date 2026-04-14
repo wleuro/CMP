@@ -1,0 +1,153 @@
+﻿using Coem.Cmp.Core.Entities;
+using Coem.Cmp.Infra.Data;
+using Coem.Cmp.Web.Areas.Admin.ViewModels;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Graph;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace Coem.Cmp.Web.Areas.Admin.Controllers
+{
+    [Area("Admin")]
+    [Authorize]
+    public class UsersController : Controller
+    {
+        private readonly ApplicationDbContext _context;
+        private readonly IConfiguration _config;
+        private readonly GraphServiceClient _graphClient;
+
+        public UsersController(ApplicationDbContext context, IConfiguration config, GraphServiceClient graphClient)
+        {
+            _context = context;
+            _config = config;
+            _graphClient = graphClient;
+        }
+
+        public async Task<IActionResult> Index()
+        {
+            var users = await _context.UserProfiles
+                .AsNoTracking()
+                .Include(u => u.Role)
+                .Include(u => u.Tenant)
+                .Select(u => new UserListViewModel
+                {
+                    Id = u.Id, // Mapeo Guid a Guid (Saneado)
+                    Email = u.Upn,
+                    DisplayName = string.IsNullOrEmpty(u.DisplayName) ? "Pendiente Login" : u.DisplayName,
+                    RoleName = u.Role != null ? u.Role.Name : "Sin Rol",
+                    TenantName = u.Tenant != null ? u.Tenant.Name : "Error de Silo",
+                    IsActive = u.IsActive,
+                    RoleId = u.RoleId, // int a int
+                    TenantId = u.TenantId ?? 0 // int? a int con fallback
+                })
+                .OrderByDescending(u => u.IsActive).ThenBy(u => u.TenantName)
+                .ToListAsync();
+
+            // ... (Carga de Roles y Tenants JSON igual que antes)
+            var roles = await _context.Roles.AsNoTracking().ToListAsync();
+            ViewBag.RolesJson = System.Text.Json.JsonSerializer.Serialize(roles.Select(r => new { Id = r.Id, Name = r.Name, IsExternal = r.Name.StartsWith("Client") }));
+            var tenants = await _context.Tenants.AsNoTracking().OrderBy(t => t.Name).ToListAsync();
+            string coemMasterTenantId = _config["AzureAd:TenantId"] ?? string.Empty;
+            ViewBag.TenantsJson = System.Text.Json.JsonSerializer.Serialize(tenants.Select(t => new {
+                Id = t.Id,
+                DisplayName = t.MicrosoftTenantId.ToString().Equals(coemMasterTenantId, StringComparison.OrdinalIgnoreCase) ? t.Name : $"{t.Name} ({t.Country})",
+                MicrosoftTenantId = t.MicrosoftTenantId.ToString()
+            }));
+
+            return View(users);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(Guid Id, int RoleId, int TenantId) // <-- Guid Id
+        {
+            var user = await _context.UserProfiles.FindAsync(Id);
+            if (user == null) return NotFound();
+
+            user.RoleId = RoleId;
+            user.TenantId = TenantId;
+            await _context.SaveChangesAsync();
+
+            TempData["SuccessMessage"] = "Identidad actualizada.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Delete(Guid Id) // <-- Guid Id para eliminar
+        {
+            var user = await _context.UserProfiles.FindAsync(Id);
+            if (user == null) return NotFound();
+
+            if (user.Upn.Equals(User.Identity?.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                TempData["ErrorMessage"] = "No puedes eliminar tu propio perfil.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            _context.UserProfiles.Remove(user);
+            await _context.SaveChangesAsync();
+
+            TempData["SuccessMessage"] = "Identidad eliminada correctamente.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Create(UserCreateViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                TempData["ErrorMessage"] = "Por favor completa todos los campos requeridos.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // Verificar si el usuario ya existe
+            var existingUser = await _context.UserProfiles.FirstOrDefaultAsync(u => u.Upn == model.Upn);
+            if (existingUser != null)
+            {
+                TempData["ErrorMessage"] = "Este usuario ya existe en el sistema.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // Crear nuevo usuario
+            var newUser = new UserProfile
+            {
+                Upn = model.Upn,
+                DisplayName = model.Upn.Split('@')[0], // Usar parte del email como nombre por defecto
+                RoleId = model.RoleId,
+                TenantId = model.TenantId,
+                IsActive = true
+            };
+
+            _context.UserProfiles.Add(newUser);
+            await _context.SaveChangesAsync();
+
+            TempData["SuccessMessage"] = $"Identidad '{model.Upn}' creada exitosamente.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ToggleStatus(Guid Id) // <-- Guid Id
+        {
+            var user = await _context.UserProfiles.FindAsync(Id);
+            if (user == null) return NotFound();
+
+            if (user.Upn.Equals(User.Identity?.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                TempData["ErrorMessage"] = "No puedes revocar tu propio acceso.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            user.IsActive = !user.IsActive;
+            await _context.SaveChangesAsync();
+
+            return RedirectToAction(nameof(Index));
+        }
+    }
+}

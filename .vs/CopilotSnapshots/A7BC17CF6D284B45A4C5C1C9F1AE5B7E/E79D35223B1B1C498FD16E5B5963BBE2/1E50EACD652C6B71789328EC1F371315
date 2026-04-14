@@ -1,0 +1,73 @@
+﻿using System.Net.Http.Headers;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Identity.Client;
+using Coem.Cmp.Infra.Data;
+using Coem.Cmp.Core.Entities;
+using Microsoft.AspNetCore.DataProtection;
+
+namespace Coem.Cmp.Web.Services
+{
+    public interface IAzureDirectBillingService
+    {
+        Task<int> SyncDirectSubscriptionsAsync();
+        Task SyncNightlyUsageAsync();
+    }
+
+    public class AzureDirectBillingService : IAzureDirectBillingService
+    {
+        private readonly ApplicationDbContext _context;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IDataProtector _protector;
+
+        public AzureDirectBillingService(ApplicationDbContext context, IHttpClientFactory httpClientFactory, IDataProtectionProvider dataProtectionProvider)
+        {
+            _context = context;
+            _httpClientFactory = httpClientFactory;
+            _protector = dataProtectionProvider.CreateProtector("Coem.Cmp.RegionalSecrets.v1");
+        }
+
+        // 1. MOTOR DE DESCUBRIMIENTO Y AUDITORÍA
+        public async Task<int> SyncDirectSubscriptionsAsync()
+        {
+            var directConfigs = await _context.AzureDirectCredentials.Where(c => c.IsActive).ToListAsync();
+
+            if (!directConfigs.Any())
+            {
+                Console.WriteLine("[DIRECT-ARM] No hay credenciales configuradas.");
+                return 0;
+            }
+
+            int processedCount = 0;
+
+            foreach (var config in directConfigs)
+            {
+                Console.WriteLine($"[DIRECT-ARM] Auditando entorno: {config.Alias}");
+
+                try
+                {
+                    var client = await GetAuthorizedClient(config);
+                    var response = await client.GetAsync("https://management.azure.com/subscriptions?api-version=2022-12-01");
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        Console.WriteLine($"[ERROR DIRECT-ARM] Fallo al consultar {config.Alias}: HTTP {response.StatusCode}");
+                        continue;
+                    }
+
+                    var armData = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                    if (!armData.RootElement.TryGetProperty("value", out var items)) continue;
+
+                    foreach (var item in items.EnumerateArray())
+                    {
+                        var subIdStr = item.GetProperty("subscriptionId").GetString();
+                        if (string.IsNullOrEmpty(subIdStr)) continue;
+                        
+                        var subId = Guid.Parse(subIdStr);
+                        var displayName = item.GetProperty("displayName").GetString() ?? "Unknown";
+                        var state = item.GetProperty("state").GetString() ?? "Unknown";
+
+                        // --- PRUEBA ÁCIDA DE PERMISOS ---
+                        var costPing = await client.GetAsync($"https://management.azure.com/subscriptions/{subIdStr}/providers/Microsoft.Consumption/usageDetails?$top=1&api-version=2023-11-01");
+                        var readPing = await client.GetAsync($"https://management.azure.com/subscriptions/{subIdStr}/resources?$top=1&api-version=2021-04-01");
+                        var auditStr = $"Cost:{(costPing.IsSuccessStatusCode ? "OK" : "FAIL")}|Read:{(readPing.IsSuccessStatusCode ? "OK" : "FAIL")}";

@@ -1,0 +1,74 @@
+﻿@model IEnumerable<Coem.Cmp.Core.Entities.CategoryMapping>
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Reglas de Clasificación FinOps";
+}
+
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0 fw-normal">Motor de Clasificación</h2>
+        <a href="/Admin/CategoryMappings/Create" class="btn btn-primary fw-bold shadow-sm">
+            + Nueva Regla
+        </a>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm border-0 rounded-3 mb-4">
+            @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="card shadow-sm border-0 rounded-3 overflow-hidden">
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="bg-light border-bottom border-2">
+                    <tr>
+                        <th class="py-3 px-4 text-dark">Prioridad</th>
+                        <th class="text-dark">Palabra Clave (Keyword)</th>
+                        <th class="text-dark">Asignar a Categoría</th>
+                        <th class="text-center text-dark">Estado</th>
+                        <th class="text-end pe-4 text-dark">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr><td colspan="5" class="text-center py-4 text-muted">No hay reglas configuradas.</td></tr>
+                    }
+                    @foreach (var item in Model)
+                    {
+                        <tr style="border-bottom: 1px solid #f3f4f6;" class="@(item.IsActive ? "" : "bg-light text-muted")">
+                            <td class="fw-bold px-4">@item.Priority</td>
+                            <td style="font-family: monospace; font-size: 1.1rem;">@item.Keyword</td>
+                            <td>
+                                <span class="badge bg-secondary px-3 py-1 rounded-1 shadow-sm">@item.CategoryCode</span>
+                            </td>
+                            <td class="text-center">
+                                @if (item.IsActive)
+                                {
+                                    <span class="badge bg-success">Activo</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">Inactivo</span>
+                                }
+                            </td>
+                            <td class="text-end pe-4">
+                                <div class="d-flex justify-content-end gap-2">
+                                    <a href="/Admin/CategoryMappings/Edit/@item.Id" class="btn btn-sm btn-outline-secondary">Editar</a>
+                                    <form action="/Admin/CategoryMappings/ToggleStatus/@item.Id" method="post" class="d-inline">
+                                        <button type="submit" class="btn btn-sm @(item.IsActive ? "btn-outline-danger" : "btn-outline-success")">
+                                            @(item.IsActive ? "Desactivar" : "Activar")
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

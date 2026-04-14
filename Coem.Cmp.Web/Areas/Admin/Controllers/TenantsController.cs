@@ -24,7 +24,7 @@ namespace Coem.Cmp.Web.Areas.Admin.Controllers
         }
 
         // =========================================================================
-        // RADAR REGIONAL EVOLUCIONADO (Con Filtro por KPI de Consumo)
+        // RADAR REGIONAL CON FILTROS FINOPS
         // =========================================================================
         [HttpGet("")]
         public async Task<IActionResult> Index(string countryFilter, string searchQuery, string categoryFilter)
@@ -38,11 +38,11 @@ namespace Coem.Cmp.Web.Areas.Admin.Controllers
             ViewBag.Countries = availableCountries;
             ViewBag.CurrentFilter = countryFilter;
             ViewBag.SearchQuery = searchQuery;
-            ViewBag.CategoryFilter = categoryFilter; // NUEVO: Rastreamos qué KPI clickeó el usuario
+            ViewBag.CategoryFilter = categoryFilter;
 
             var query = _context.Tenants.Include(t => t.Subscriptions).AsQueryable();
 
-            // 1. Aplicamos los filtros básicos primero (País y Texto)
+            // 1. Filtros principales (País y Texto)
             if (!string.IsNullOrEmpty(countryFilter))
             {
                 query = query.Where(t => t.Country == countryFilter);
@@ -56,25 +56,27 @@ namespace Coem.Cmp.Web.Areas.Admin.Controllers
                     t.MicrosoftTenantId.ToString().Contains(searchQuery));
             }
 
-            // 2. CÁLCULOS TÁCTICOS: Calculamos los números de los KPIs ANTES de filtrar por categoría
-            // (Esto asegura que los cuadros mantengan sus totales aunque apliques el filtro)
+            // 2. CÁLCULOS DE KPI (Conteo de clientes que poseen al menos un servicio de la categoría)
             var allFiltered = await query.ToListAsync();
+
             ViewBag.TotalAP = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "AP"));
-            ViewBag.TotalAL = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "AL") && !t.Subscriptions.Any(s => s.Category == "AP"));
-            ViewBag.TotalColab = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "Colab") && !t.Subscriptions.Any(s => s.Category == "AP" || s.Category == "AL"));
+            ViewBag.TotalM365 = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "M365"));
+            ViewBag.TotalInfra = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "INFRA"));
+            ViewBag.TotalDev = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "DEV"));
+            ViewBag.TotalAL = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "AL"));
             ViewBag.EnRevision = allFiltered.Count(t => !t.Subscriptions.Any());
 
-            // 3. FILTRO POR KPI (El clic en los botones de colores)
+            // 3. FILTRO DE CATEGORÍA (Intersección limpia, sin exclusiones mutuas)
             if (!string.IsNullOrEmpty(categoryFilter))
             {
-                if (categoryFilter == "AP")
-                    query = query.Where(t => t.Subscriptions.Any(s => s.Category == "AP"));
-                else if (categoryFilter == "AL")
-                    query = query.Where(t => t.Subscriptions.Any(s => s.Category == "AL") && !t.Subscriptions.Any(s => s.Category == "AP"));
-                else if (categoryFilter == "Colab")
-                    query = query.Where(t => t.Subscriptions.Any(s => s.Category == "Colab") && !t.Subscriptions.Any(s => s.Category == "AP" || s.Category == "AL"));
-                else if (categoryFilter == "None")
+                if (categoryFilter == "None")
+                {
                     query = query.Where(t => !t.Subscriptions.Any());
+                }
+                else
+                {
+                    query = query.Where(t => t.Subscriptions.Any(s => s.Category == categoryFilter));
+                }
             }
 
             var tenants = await query.OrderByDescending(t => t.OnboardingDate).AsNoTracking().ToListAsync();
@@ -112,14 +114,14 @@ namespace Coem.Cmp.Web.Areas.Admin.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        // Script residual de prueba financiera (Opcional mantenerlo aquí ya que ahora vive mejor en CountriesController, pero lo dejamos para no romperte nada extra)
+        // Endpoint de diagnóstico de permisos Graph/Partner Center
         [HttpGet("TestBillingAccess/{countryId}")]
         public async Task<IActionResult> TestBillingAccess(int countryId)
         {
             try
             {
                 var cred = await _context.PartnerCenterCredentials.FindAsync(countryId);
-                if (cred == null) return Content("ERROR: País no encontrado en la bóveda.", "text/plain");
+                if (cred == null) return Content("ERROR: País no encontrado en la base de datos.", "text/plain");
 
                 var plainTextSecret = _protector.Unprotect(cred.ClientSecret);
 
@@ -138,17 +140,17 @@ namespace Coem.Cmp.Web.Areas.Admin.Controllers
 
                 if (response.IsSuccessStatusCode)
                 {
-                    return Content($"ÉXITO TÁCTICO en {cred.CountryName}: La App tiene el rol de Admin Agent.", "text/plain");
+                    return Content($"AUTORIZADO en {cred.CountryName}: La aplicación tiene permisos correctos de lectura.", "text/plain");
                 }
                 else
                 {
                     var error = await response.Content.ReadAsStringAsync();
-                    return Content($"ACCESO DENEGADO en {cred.CountryName} ({(int)response.StatusCode}).", "text/plain");
+                    return Content($"ACCESO DENEGADO en {cred.CountryName} ({(int)response.StatusCode}). Detalle: {error}", "text/plain");
                 }
             }
             catch (Exception ex)
             {
-                return Content($"ERROR DE INFRAESTRUCTURA: {ex.Message}", "text/plain");
+                return Content($"ERROR DE EJECUCIÓN: {ex.Message}", "text/plain");
             }
         }
     }
