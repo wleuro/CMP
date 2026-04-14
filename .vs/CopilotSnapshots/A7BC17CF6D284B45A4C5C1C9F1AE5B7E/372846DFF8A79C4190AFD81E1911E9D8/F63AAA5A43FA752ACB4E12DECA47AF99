@@ -1,6 +1,0 @@
-﻿public class UserCreateViewModel
-{
-    public required string Upn { get; set; }
-    public int RoleId { get; set; }
-    public int TenantId { get; set; } // ID de Tenant (int)
-}
