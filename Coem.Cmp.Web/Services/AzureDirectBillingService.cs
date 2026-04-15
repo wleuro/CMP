@@ -12,7 +12,7 @@ namespace Coem.Cmp.Web.Services
     public interface IAzureDirectBillingService
     {
         Task<int> SyncDirectSubscriptionsAsync();
-        Task SyncNightlyUsageAsync();
+        Task SyncDailyConsumptionAsync(); // Renombrado para mayor claridad semántica
     }
 
     public class AzureDirectBillingService : IAzureDirectBillingService
@@ -23,8 +23,8 @@ namespace Coem.Cmp.Web.Services
         private readonly ILogger<AzureDirectBillingService> _logger;
 
         public AzureDirectBillingService(
-            ApplicationDbContext context, 
-            IHttpClientFactory httpClientFactory, 
+            ApplicationDbContext context,
+            IHttpClientFactory httpClientFactory,
             IDataProtectionProvider dataProtectionProvider,
             ILogger<AzureDirectBillingService> logger)
         {
@@ -74,7 +74,7 @@ namespace Coem.Cmp.Web.Services
                     {
                         var subIdStr = item.GetProperty("subscriptionId").GetString();
                         if (string.IsNullOrEmpty(subIdStr)) continue;
-                        
+
                         var subId = Guid.Parse(subIdStr);
                         var displayName = item.GetProperty("displayName").GetString() ?? "Unknown";
                         var state = item.GetProperty("state").GetString() ?? "Unknown";
@@ -119,31 +119,39 @@ namespace Coem.Cmp.Web.Services
             return processedCount;
         }
 
-        // 2. MOTOR FINANCIERO NOCTURNO (CON MARKUP)
-        public async Task SyncNightlyUsageAsync()
+        // 2. MOTOR FINANCIERO EN TIEMPO REAL (El "Radar" Operativo)
+        public async Task SyncDailyConsumptionAsync()
         {
             var credentials = await _context.AzureDirectCredentials.Where(c => c.IsActive).ToListAsync();
 
-            // Consumo del día anterior (cerrado oficialmente por Azure)
-            var targetDate = DateTime.UtcNow.AddDays(-1).Date;
+            // Definimos el mes en curso para el backfill operativo
+            var today = DateTime.UtcNow;
+            var startOfMonth = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
             foreach (var config in credentials)
             {
                 try
                 {
+                    _logger.LogInformation($"[DIRECT-ARM] Iniciando extracción de consumo para entorno: {config.Alias}");
                     var client = await GetAuthorizedClient(config);
 
-                    // Solo traemos las suscripciones de este conector específico
                     var subs = await _context.ExternalSubscriptions
                         .Where(s => s.AzureDirectCredentialId == config.Id)
                         .ToListAsync();
 
                     foreach (var sub in subs)
                     {
-                        // Blindaje: Evitar colisión si por error la sub existe en CSP nativo
+                        // Escudo de colisión: Si la suscripción ya está en Partner Center, priorizamos esa vía
                         if (await _context.Subscriptions.AnyAsync(s => s.Id == sub.Id)) continue;
 
-                        var url = $"https://management.azure.com/subscriptions/{sub.Id}/providers/Microsoft.Consumption/usageDetails?metric=AmortizedCost&$filter=properties/usageStart eq '{targetDate:yyyy-MM-dd}'&api-version=2023-11-01";
+                        _logger.LogInformation($"[DIRECT-ARM] Limpiando consumo previo del mes para suscripción: {sub.Id}");
+                        // WIPE AND REPLACE: Borramos el consumo de este mes para inyectar el acumulado fresco
+                        await _context.ExternalUsageRecords
+                            .Where(r => r.SubscriptionId == sub.Id && r.UsageDate >= startOfMonth)
+                            .ExecuteDeleteAsync();
+
+                        // Llamada a la API de Cost Management filtrando desde el inicio del mes
+                        var url = $"https://management.azure.com/subscriptions/{sub.Id}/providers/Microsoft.Consumption/usageDetails?metric=AmortizedCost&$filter=properties/usageStart ge '{startOfMonth:yyyy-MM-dd}'&api-version=2023-11-01";
                         var response = await client.GetAsync(url);
 
                         if (response.IsSuccessStatusCode)
@@ -151,54 +159,65 @@ namespace Coem.Cmp.Web.Services
                             var usageData = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
                             if (usageData.RootElement.TryGetProperty("value", out var records))
                             {
+                                var recordsBatch = new List<ExternalUsageRecord>();
+                                int batchSize = 1000;
+
                                 foreach (var record in records.EnumerateArray())
                                 {
                                     var props = record.GetProperty("properties");
                                     var productName = props.GetProperty("product").GetString() ?? "Unknown";
-                                    var rawCost = props.GetProperty("costInBillingCurrency").GetDecimal();
+                                    var rawCost = props.TryGetProperty("costInBillingCurrency", out var costEl) && costEl.ValueKind != JsonValueKind.Null ? costEl.GetDecimal() : 0m;
+                                    var usageDateStr = props.GetProperty("usageStart").GetString();
+                                    var recordDate = !string.IsNullOrEmpty(usageDateStr) ? DateTime.Parse(usageDateStr) : DateTime.UtcNow;
 
-                                    // LA MATEMÁTICA DEL MARGEN (Tu rentabilidad en COEM)
+                                    var meterCategory = props.TryGetProperty("meterCategory", out var catEl) ? catEl.GetString() ?? "Unknown" : "Unknown";
+                                    var billingCurrency = props.TryGetProperty("billingCurrencyCode", out var curEl) ? catEl.GetString() ?? "USD" : "USD";
+
                                     decimal calculatedBilledCost = rawCost * (1 + sub.Markup);
 
-                                    // IDEMPOTENCIA: Verificar si ya guardamos este recurso hoy
-                                    bool exists = await _context.ExternalUsageRecords.AnyAsync(u =>
-                                        u.SubscriptionId == sub.Id &&
-                                        u.UsageDate == targetDate &&
-                                        u.ProductName == productName);
-
-                                    if (!exists)
+                                    recordsBatch.Add(new ExternalUsageRecord
                                     {
-                                        var meterCategory = props.GetProperty("meterCategory").GetString() ?? "Unknown";
-                                        var billingCurrency = props.GetProperty("billingCurrencyCode").GetString() ?? "USD";
-                                        
-                                        _context.ExternalUsageRecords.Add(new ExternalUsageRecord
-                                        {
-                                            SubscriptionId = sub.Id,
-                                            UsageDate = targetDate,
-                                            ProductName = productName,
-                                            MeterCategory = meterCategory,
-                                            Quantity = props.GetProperty("quantity").GetDecimal(),
-                                            EstimatedCost = rawCost,             // Lo que cobra Azure
-                                            MarkupPercentage = sub.Markup,       // El % aplicado ese día
-                                            BilledCost = calculatedBilledCost,   // Lo que facturas/muestras
-                                            Currency = billingCurrency,
-                                            ProviderSource = "BYOT_EA"
-                                        });
+                                        SubscriptionId = sub.Id,
+                                        UsageDate = recordDate,
+                                        ProductName = productName,
+                                        MeterCategory = meterCategory,
+                                        Quantity = props.TryGetProperty("quantity", out var qtyEl) && qtyEl.ValueKind != JsonValueKind.Null ? qtyEl.GetDecimal() : 0m,
+                                        EstimatedCost = rawCost,
+                                        MarkupPercentage = sub.Markup,
+                                        BilledCost = calculatedBilledCost,
+                                        Currency = billingCurrency,
+                                        ProviderSource = "BYOT_EA_Direct"
+                                    });
+
+                                    if (recordsBatch.Count >= batchSize)
+                                    {
+                                        _context.ExternalUsageRecords.AddRange(recordsBatch);
+                                        await _context.SaveChangesAsync();
+                                        recordsBatch.Clear();
                                     }
                                 }
-                                await _context.SaveChangesAsync();
+
+                                if (recordsBatch.Any())
+                                {
+                                    _context.ExternalUsageRecords.AddRange(recordsBatch);
+                                    await _context.SaveChangesAsync();
+                                }
+                                _logger.LogInformation($"[DIRECT-ARM] Inyectado consumo del mes para suscripción: {sub.Id}");
                             }
+                        }
+                        else
+                        {
+                            _logger.LogWarning($"[DIRECT-ARM] API Cost Management rechazó la suscripción {sub.Id}. HTTP: {response.StatusCode}");
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError($"[NIGHTLY ERROR] {config.Alias}: {ex.Message}");
+                    _logger.LogError($"[ERROR CRITICO ARM] Fallo en la extracción para {config.Alias}: {ex.Message}");
                 }
             }
         }
 
-        // HELPER: Autenticación centralizada
         private async Task<HttpClient> GetAuthorizedClient(AzureDirectCredential config)
         {
             var plainTextSecret = _protector.Unprotect(config.ClientSecret);

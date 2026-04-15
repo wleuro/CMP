@@ -20,6 +20,7 @@ namespace Coem.Cmp.Web.Services
         Task<int> SyncCustomersAsync();
         Task<int> SyncSubscriptionsAsync();
         Task SyncNightlyUsageAsync(string? billingPeriod = "current");
+        Task SyncCspOperationalConsumptionAsync(); // EL NUEVO RADAR CSP
     }
 
     public class PartnerCenterSyncService : IPartnerCenterSyncService
@@ -289,6 +290,110 @@ namespace Coem.Cmp.Web.Services
             }
         }
 
+        // --- VÍA OPERATIVA: BYPASS CSP POR COST MANAGEMENT (EL RADAR CSP) ---
+        public async Task SyncCspOperationalConsumptionAsync()
+        {
+            var regionalConfigs = await _context.PartnerCenterCredentials.Where(c => c.IsActive).ToListAsync();
+            var today = DateTime.UtcNow;
+            var startOfMonth = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+            foreach (var config in regionalConfigs)
+            {
+                _logger.LogInformation($"[RADAR CSP] Iniciando bypass operativo Cost Management para {config.CountryName}");
+                try
+                {
+                    // 1. Token para Azure Resource Manager
+                    var authResult = await GetArmTokenAsync(config);
+                    var client = CreateHttpClient(authResult.AccessToken);
+
+                    // 2. Descubrir el BillingAccountId dinámicamente
+                    var billingAccountsResponse = await client.GetAsync("https://management.azure.com/providers/Microsoft.Billing/billingAccounts?api-version=2020-05-01");
+                    if (!billingAccountsResponse.IsSuccessStatusCode)
+                    {
+                        _logger.LogWarning($"[RADAR CSP] Sin acceso a BillingAccounts en {config.CountryName}. HTTP {billingAccountsResponse.StatusCode}. ¿Tiene el AppReg el rol de 'Billing Reader' en el tenant?");
+                        continue;
+                    }
+
+                    var baDoc = JsonDocument.Parse(await billingAccountsResponse.Content.ReadAsStringAsync());
+                    if (!baDoc.RootElement.TryGetProperty("value", out var baArray) || baArray.GetArrayLength() == 0) continue;
+
+                    string billingAccountId = baArray[0].GetProperty("name").GetString() ?? "";
+                    _logger.LogInformation($"[RADAR CSP] Raíz de Facturación detectada: {billingAccountId}");
+
+                    // 3. Recorrer los Tenants CSP de este país
+                    var tenants = await _context.Tenants.Where(t => t.Country == config.CountryName).ToListAsync();
+
+                    foreach (var tenant in tenants)
+                    {
+                        _logger.LogInformation($"[RADAR CSP] Extrayendo datos operativos del mes para Tenant {tenant.MicrosoftTenantId}");
+
+                        // Wipe and Replace: Limpiamos los datos operativos previos de este mes
+                        await _context.PCUsageRecords
+                            .Where(r => r.TenantId == tenant.Id && r.UsageDate >= startOfMonth && r.ProviderSource == "CostManagement_Operational")
+                            .ExecuteDeleteAsync();
+
+                        // 4. Consulta a la API
+                        string scope = $"providers/Microsoft.Billing/billingAccounts/{billingAccountId}/customers/{tenant.MicrosoftTenantId}";
+                        string url = $"https://management.azure.com/{scope}/providers/Microsoft.Consumption/usageDetails?metric=AmortizedCost&$filter=properties/usageStart ge '{startOfMonth:yyyy-MM-dd}'&api-version=2023-11-01";
+
+                        var usageResponse = await client.GetAsync(url);
+                        if (!usageResponse.IsSuccessStatusCode) continue;
+
+                        var usageDoc = JsonDocument.Parse(await usageResponse.Content.ReadAsStringAsync());
+                        if (!usageDoc.RootElement.TryGetProperty("value", out var records)) continue;
+
+                        var recordsBatch = new List<PCUsageRecord>();
+                        int processed = 0;
+
+                        foreach (var record in records.EnumerateArray())
+                        {
+                            var props = record.GetProperty("properties");
+                            var usageDateStr = props.TryGetProperty("usageStart", out var dEl) && dEl.ValueKind != JsonValueKind.Null ? dEl.GetString() : null;
+                            var date = !string.IsNullOrEmpty(usageDateStr) ? DateTime.Parse(usageDateStr) : DateTime.UtcNow;
+
+                            recordsBatch.Add(new PCUsageRecord
+                            {
+                                TenantId = tenant.Id,
+                                SubscriptionId = props.TryGetProperty("subscriptionId", out var sEl) && sEl.ValueKind != JsonValueKind.Null ? Guid.Parse(sEl.GetString()!) : Guid.Empty,
+                                UsageDate = date,
+                                Publisher = "Microsoft",
+                                ChargeType = "Usage",
+                                ProductName = props.TryGetProperty("product", out var pEl) ? pEl.GetString() ?? "Unknown" : "Unknown",
+                                MeterCategory = props.TryGetProperty("meterCategory", out var mEl) ? mEl.GetString() ?? "Unknown" : "Unknown",
+                                Quantity = props.TryGetProperty("quantity", out var qEl) && qEl.ValueKind != JsonValueKind.Null ? qEl.GetDecimal() : 0m,
+                                EstimatedCost = props.TryGetProperty("costInBillingCurrency", out var cEl) && cEl.ValueKind != JsonValueKind.Null ? cEl.GetDecimal() : 0m,
+                                BilledCost = props.TryGetProperty("costInBillingCurrency", out var bcEl) && bcEl.ValueKind != JsonValueKind.Null ? bcEl.GetDecimal() : 0m,
+                                MarkupPercentage = 0m,
+                                Currency = props.TryGetProperty("billingCurrencyCode", out var curEl) ? curEl.GetString() ?? "USD" : "USD",
+                                ProviderSource = "CostManagement_Operational", // LA MARCA DE AGUA
+                                ResourceId = props.TryGetProperty("instanceId", out var iEl) && iEl.ValueKind != JsonValueKind.Null ? iEl.GetString() : null
+                            });
+
+                            processed++;
+                            if (recordsBatch.Count >= 1000)
+                            {
+                                _context.PCUsageRecords.AddRange(recordsBatch);
+                                await _context.SaveChangesAsync();
+                                recordsBatch.Clear();
+                            }
+                        }
+
+                        if (recordsBatch.Any())
+                        {
+                            _context.PCUsageRecords.AddRange(recordsBatch);
+                            await _context.SaveChangesAsync();
+                        }
+
+                        if (processed > 0) _logger.LogInformation($"[RADAR CSP] {processed} registros de consumo en tiempo real inyectados para el cliente {tenant.Name}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError($"[ERROR RADAR CSP] Fallo en la extracción operativa para {config.CountryName}: {ex.Message}");
+                }
+            }
+        }
+
         private async Task ProcessManifestFiles(JsonElement statusData, PartnerCenterCredential config, string billingPeriod)
         {
             _logger.LogInformation($"Iniciando extracción de facturación masiva NCE ({billingPeriod}) para {config.CountryName}...");
@@ -444,6 +549,18 @@ namespace Coem.Cmp.Web.Services
 
             string scope = isGraph ? "https://graph.microsoft.com/.default" : "https://api.partnercenter.microsoft.com/.default";
             return await app.AcquireTokenForClient(new[] { scope }).ExecuteAsync();
+        }
+
+        // Método de soporte para sacar el token directo de Azure Resource Manager
+        private async Task<AuthenticationResult> GetArmTokenAsync(PartnerCenterCredential config)
+        {
+            var plainTextSecret = _protector.Unprotect(config.ClientSecret);
+            var app = ConfidentialClientApplicationBuilder.Create(config.ClientId)
+                .WithClientSecret(plainTextSecret)
+                .WithAuthority(new Uri($"https://login.microsoftonline.com/{config.TenantId}"))
+                .Build();
+
+            return await app.AcquireTokenForClient(new[] { "https://management.azure.com/.default" }).ExecuteAsync();
         }
 
         private HttpClient CreateHttpClient(string token)

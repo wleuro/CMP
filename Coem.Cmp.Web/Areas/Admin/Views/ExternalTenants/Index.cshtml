@@ -137,7 +137,81 @@
     </div>
 </div>
 
-@* ... MODALES DE NUEVO Y EDITAR SE MANTIENEN IGUAL ... *@
+@* MODAL: NUEVO CONECTOR *@
+<div class="modal fade" id="newConnectorModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-0 bg-light">
+                <h5 class="modal-title fw-bold">Nuevo Conector Externo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="newConnectorForm" action="/Admin/ExternalTenants/Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="newAlias" class="form-label fw-bold">Alias / Cliente</label>
+                        <input type="text" class="form-control border-1" id="newAlias" name="alias" placeholder="ej: ClienteEA-001" required />
+                    </div>
+                    <div class="mb-3">
+                        <label for="newTenant" class="form-label fw-bold">Tenant ID (Directorio)</label>
+                        <input type="text" class="form-control border-1" id="newTenant" name="tenantId" placeholder="ej: 72f988bf-86f1-41af-91ab-2d7cd011db47" required />
+                    </div>
+                    <div class="mb-3">
+                        <label for="newClient" class="form-label fw-bold">Client ID (App Registration)</label>
+                        <input type="text" class="form-control border-1" id="newClient" name="clientId" placeholder="ej: 12345678-1234-1234-1234-123456789012" required />
+                    </div>
+                    <div class="mb-3">
+                        <label for="newSecret" class="form-label fw-bold">Client Secret</label>
+                        <input type="password" class="form-control border-1" id="newSecret" name="plainSecret" placeholder="Contraseña de la aplicación" required />
+                        <small class="text-muted">Se encriptará automáticamente al guardar.</small>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-dark fw-bold shadow-sm">✅ Crear Conector</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@* MODAL: EDITAR CONECTOR *@
+<div class="modal fade" id="editConnectorModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-0 bg-light">
+                <h5 class="modal-title fw-bold">Editar Conector Externo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editForm" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="editAlias" class="form-label fw-bold">Alias / Cliente</label>
+                        <input type="text" class="form-control border-1" id="editAlias" name="alias" required />
+                    </div>
+                    <div class="mb-3">
+                        <label for="editTenant" class="form-label fw-bold">Tenant ID (Directorio)</label>
+                        <input type="text" class="form-control border-1" id="editTenant" name="tenantId" required />
+                    </div>
+                    <div class="mb-3">
+                        <label for="editClient" class="form-label fw-bold">Client ID (App Registration)</label>
+                        <input type="text" class="form-control border-1" id="editClient" name="clientId" required />
+                    </div>
+                    <div class="mb-3">
+                        <label for="editSecret" class="form-label fw-bold">Client Secret (Dejar vacío para no cambiar)</label>
+                        <input type="password" class="form-control border-1" id="editSecret" name="plainSecret" placeholder="Dejar vacío para mantener el actual" />
+                        <small class="text-muted">Si completa este campo, se actualizará la contraseña.</small>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-dark fw-bold shadow-sm">✅ Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 @section Scripts {
     <script>
@@ -146,6 +220,7 @@
             document.getElementById('editAlias').value = alias;
             document.getElementById('editTenant').value = tenantId;
             document.getElementById('editClient').value = clientId;
+            document.getElementById('editSecret').value = '';
             new bootstrap.Modal(document.getElementById('editConnectorModal')).show();
         }
 

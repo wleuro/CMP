@@ -10,38 +10,62 @@ namespace Coem.Cmp.Worker
     {
         private readonly ILogger<NightlyBillingFunction> _logger;
         private readonly IPartnerCenterSyncService _pcSyncService;
+        private readonly IAzureDirectBillingService _azureDirectService;
 
-        public NightlyBillingFunction(ILogger<NightlyBillingFunction> logger, IPartnerCenterSyncService pcSyncService)
+        // Inyección de dependencias de todos los motores
+        public NightlyBillingFunction(
+            ILogger<NightlyBillingFunction> logger,
+            IPartnerCenterSyncService pcSyncService,
+            IAzureDirectBillingService azureDirectService)
         {
             _logger = logger;
             _pcSyncService = pcSyncService;
+            _azureDirectService = azureDirectService;
         }
 
-        [Function("SyncNightlyUsage")]
+        [Function("SyncDailyUsage")] // Renombrado a uso diario para reflejar el modelo híbrido
         public async Task Run([TimerTrigger("0 0 2 * * *")] TimerInfo myTimer)
         {
-            _logger.LogInformation($"Iniciando motor de facturación automatizado a las: {DateTime.UtcNow} UTC");
+            _logger.LogInformation($"[ORQUESTADOR HÍBRIDO] Iniciando motor automatizado a las: {DateTime.UtcNow} UTC");
 
             try
             {
-                //// Fase 1: Asegurar que todos los inquilinos nuevos existan en la BD
-                //_logger.LogInformation("Fase 1: Sincronizando clientes...");
-                //await _pcSyncService.SyncCustomersAsync();
+                // ==========================================================
+                // VÍA 1: LA VERDAD FINANCIERA (Partner Center & Graph API)
+                // ==========================================================
+                _logger.LogInformation("Fase 1: Sincronizando clientes y suscripciones CSP...");
+                await _pcSyncService.SyncCustomersAsync();
+                await _pcSyncService.SyncSubscriptionsAsync();
 
-                //// Fase 2: Asegurar que todas las suscripciones nuevas existan y estén categorizadasdotnetdo
-                //_logger.LogInformation("Fase 2: Sincronizando suscripciones y aplicando reglas FinOps...");
-                //await _pcSyncService.SyncSubscriptionsAsync();
+                _logger.LogInformation("Fase 2: Extrayendo facturación financiera (Graph)...");
+                // Intentamos traer la verdad contable. Si Microsoft lo bloquea por cierre, el log lo reportará silenciosamente.
+                await _pcSyncService.SyncNightlyUsageAsync("current");
 
-                // Fase 3: Extracción segura de dólares
-                _logger.LogInformation("Fase 3: Extrayendo facturación NCE del mes en curso...");
-                await _pcSyncService.SyncNightlyUsageAsync("202602");
 
-                _logger.LogInformation("Ciclo de facturación nocturno completado con éxito.");
+                // ==========================================================
+                // VÍA 1.5: EL RADAR OPERATIVO CSP (El Torniquete de Tiempo Real)
+                // ==========================================================
+                _logger.LogInformation("Fase 2.5: Extrayendo consumo operativo (Radar CSP) vía Cost Management...");
+                // Esta es la línea vital que salva la visibilidad durante los 15 días de apagón de Microsoft
+                await _pcSyncService.SyncCspOperationalConsumptionAsync();
+
+
+                // ==========================================================
+                // VÍA 2: EL RADAR EXTERNO/BYOT (Azure Cost Management Directo)
+                // ==========================================================
+                _logger.LogInformation("Fase 3: Sincronizando metadatos de entornos directos (Azure Direct)...");
+                await _azureDirectService.SyncDirectSubscriptionsAsync();
+
+                _logger.LogInformation("Fase 4: Extrayendo consumo operativo externo acumulado del mes...");
+                await _azureDirectService.SyncDailyConsumptionAsync();
+
+
+                _logger.LogInformation("[ORQUESTADOR HÍBRIDO] Ciclo de facturación completado con éxito.");
             }
             catch (Exception ex)
             {
-                // Es crítico propagar el error para que la infraestructura marque la ejecución como Fallida
-                _logger.LogError($"Fallo crítico en la ejecución del worker nocturno: {ex.Message}");
+                // Propagación crítica para que Application Insights y Azure registren la caída
+                _logger.LogError($"Fallo crítico en la ejecución del orquestador: {ex.Message}");
                 throw;
             }
         }
