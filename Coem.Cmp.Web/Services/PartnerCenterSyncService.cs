@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Net.Http.Json; // VITAL: Para PostAsJsonAsync y ReadFromJsonAsync
+using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +11,7 @@ using Microsoft.Identity.Client;
 using Coem.Cmp.Infra.Data;
 using Coem.Cmp.Core.Entities;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Logging; // VITAL: Para el sistema de Logs
+using Microsoft.Extensions.Logging;
 
 namespace Coem.Cmp.Web.Services
 {
@@ -19,7 +19,7 @@ namespace Coem.Cmp.Web.Services
     {
         Task<int> SyncCustomersAsync();
         Task<int> SyncSubscriptionsAsync();
-        Task SyncNightlyUsageAsync();
+        Task SyncNightlyUsageAsync(string? billingPeriod = "current");
     }
 
     public class PartnerCenterSyncService : IPartnerCenterSyncService
@@ -67,7 +67,7 @@ namespace Coem.Cmp.Web.Services
                         {
                             var tenantIdStr = item.GetProperty("companyProfile").GetProperty("tenantId").GetString();
                             if (string.IsNullOrEmpty(tenantIdStr)) continue;
-                            
+
                             var pcTenantId = Guid.Parse(tenantIdStr);
                             var existingTenant = await _context.Tenants.FirstOrDefaultAsync(t => t.MicrosoftTenantId == pcTenantId);
 
@@ -75,7 +75,7 @@ namespace Coem.Cmp.Web.Services
                             {
                                 var companyName = item.GetProperty("companyProfile").GetProperty("companyName").GetString() ?? "Unknown";
                                 var domain = item.GetProperty("companyProfile").GetProperty("domain").GetString() ?? "unknown.onmicrosoft.com";
-                                
+
                                 _context.Tenants.Add(new Tenant
                                 {
                                     MicrosoftTenantId = pcTenantId,
@@ -110,7 +110,6 @@ namespace Coem.Cmp.Web.Services
         {
             var regionalConfigs = await _context.PartnerCenterCredentials.Where(c => c.IsActive).ToListAsync();
 
-            // CARGA DE REGLAS DE NEGOCIO DINÁMICAS
             var categoryRules = await _context.CategoryMappings
                 .Where(c => c.IsActive)
                 .OrderBy(c => c.Priority)
@@ -149,17 +148,15 @@ namespace Coem.Cmp.Web.Services
                         {
                             var subIdStr = item.GetProperty("id").GetString();
                             if (string.IsNullOrEmpty(subIdStr)) continue;
-                            
+
                             var subId = Guid.Parse(subIdStr);
                             var offerName = item.GetProperty("offerName").GetString() ?? "Unknown";
                             var offerId = item.GetProperty("offerId").GetString() ?? "Unknown";
 
-                            // MOTOR DE CLASIFICACIÓN DINÁMICO
-                            string categoryTag = "AL"; // Valor residual
+                            string categoryTag = "AL";
                             string offerNameUpper = offerName.ToUpperInvariant();
                             string offerIdUpper = offerId.ToUpperInvariant();
 
-                            // Evaluación secuencial por prioridad en base de datos
                             foreach (var rule in categoryRules)
                             {
                                 string ruleKeyword = rule.Keyword.ToUpperInvariant();
@@ -185,11 +182,11 @@ namespace Coem.Cmp.Web.Services
                                 {
                                     effDate = dateEl.GetDateTime();
                                 }
-                                
+
                                 var statusStr = item.GetProperty("status").GetString() ?? "Unknown";
                                 var createdDateStr = item.GetProperty("creationDate").GetString();
                                 var createdDate = !string.IsNullOrEmpty(createdDateStr) ? DateTime.Parse(createdDateStr) : DateTime.UtcNow;
-                                
+
                                 _context.Subscriptions.Add(new Subscription
                                 {
                                     Id = subId,
@@ -206,7 +203,7 @@ namespace Coem.Cmp.Web.Services
                             processedCount++;
                         }
                         await _context.SaveChangesAsync();
-                        await Task.Delay(100); // Prevención de Throttling
+                        await Task.Delay(100);
                     }
                 }
                 catch (Exception ex) { _logger.LogError($"[ERROR SYNC SUBS] {config.CountryName}: {ex.Message}"); }
@@ -214,8 +211,8 @@ namespace Coem.Cmp.Web.Services
             return processedCount;
         }
 
-        // --- MOTOR NCE ASÍNCRONO (Microsoft Graph Billing API) ---
-        public async Task SyncNightlyUsageAsync()
+        // --- MOTOR NCE ASÍNCRONO (Con Cortacircuitos Resiliente) ---
+        public async Task SyncNightlyUsageAsync(string? billingPeriod = "current")
         {
             var regionalConfigs = await _context.PartnerCenterCredentials.Where(c => c.IsActive).ToListAsync();
 
@@ -223,52 +220,220 @@ namespace Coem.Cmp.Web.Services
             {
                 try
                 {
-                    _logger.LogInformation($"Solicitando exportación NCE vía Graph para {config.CountryName}...");
+                    _logger.LogInformation($"Solicitando exportación NCE ({billingPeriod}) vía Graph para {config.CountryName}...");
 
                     var authResult = await GetTokenAsync(config, isGraph: true);
                     var client = CreateHttpClient(authResult.AccessToken);
 
-                    var requestBody = new { billingPeriod = "current", currencyCode = "USD", attributeSet = "full" };
-                    var response = await client.PostAsJsonAsync("https://graph.microsoft.com/v1.0/reports/partners/billing/usage/unbilled/export", requestBody);
+                    string exportType = billingPeriod == "current" ? "unbilled" : "billed";
+                    string url = $"https://graph.microsoft.com/v1.0/reports/partners/billing/usage/{exportType}/export";
+
+                    var requestBody = new { billingPeriod = billingPeriod, currencyCode = "USD", attributeSet = "full" };
+                    var response = await client.PostAsJsonAsync(url, requestBody);
 
                     if (response.StatusCode == System.Net.HttpStatusCode.Accepted)
                     {
                         var locationHeader = response.Headers.Location;
                         if (locationHeader == null) continue;
-                        
+
                         string operationUrl = locationHeader.ToString();
                         bool isCompleted = false;
+                        int attemptCounter = 0;
+                        int maxAttempts = 30; // 15 minutos máximo de espera por país
 
-                        while (!isCompleted)
+                        while (!isCompleted && attemptCounter < maxAttempts)
                         {
-                            _logger.LogInformation($"Esperando reporte de {config.CountryName}...");
+                            attemptCounter++;
                             await Task.Delay(30000);
 
                             var statusResponse = await client.GetAsync(operationUrl);
-                            var statusData = await statusResponse.Content.ReadFromJsonAsync<JsonElement>();
-
-                            var statusProp = statusData.GetProperty("status");
-                            string status = statusProp.GetString() ?? "unknown";
-                            
-                            if (status == "completed")
+                            if (!statusResponse.IsSuccessStatusCode)
                             {
-                                await ProcessManifestFiles(statusData, config);
+                                _logger.LogWarning($"[BLOQUEO HTTP] Graph falló para {config.CountryName}. Código: {statusResponse.StatusCode}. Reintentando...");
+                                continue;
+                            }
+
+                            var contentString = await statusResponse.Content.ReadAsStringAsync();
+                            using var statusData = JsonDocument.Parse(contentString);
+                            var root = statusData.RootElement;
+
+                            string rawStatus = root.TryGetProperty("status", out var statusProp) ? statusProp.GetString() ?? "unknown" : "unknown";
+                            string statusLower = rawStatus.ToLowerInvariant();
+
+                            _logger.LogInformation($"[{config.CountryName} Intento {attemptCounter}/{maxAttempts}] Estado reportado por Microsoft: '{rawStatus}'");
+
+                            if (statusLower == "completed" || statusLower == "succeeded")
+                            {
+                                await ProcessManifestFiles(root.Clone(), config, billingPeriod!);
                                 isCompleted = true;
                             }
-                            else if (status == "failed") break;
+                            else if (statusLower == "failed")
+                            {
+                                _logger.LogError($"[ERROR GRAVE] La exportación falló en los servidores de Microsoft para {config.CountryName}. Detalle: {contentString}");
+                                break;
+                            }
+                        }
+
+                        if (!isCompleted)
+                        {
+                            _logger.LogWarning($"[TIMEOUT NCE] Se abortó la espera para {config.CountryName} tras 15 minutos. Posible falta de facturación activa en Microsoft.");
                         }
                     }
+                    else
+                    {
+                        string errorStr = await response.Content.ReadAsStringAsync();
+                        _logger.LogError($"[RECHAZO INICIAL] No se pudo crear la solicitud en Graph para {config.CountryName}. HTTP {response.StatusCode}: {errorStr}");
+                    }
                 }
-                catch (Exception ex) { _logger.LogError($"[FATAL] Error en {config.CountryName}: {ex.Message}"); }
+                catch (Exception ex) { _logger.LogError($"[FATAL NCE] Error en {config.CountryName}: {ex.Message}"); }
             }
         }
 
-        private async Task ProcessManifestFiles(JsonElement statusData, PartnerCenterCredential config)
+        private async Task ProcessManifestFiles(JsonElement statusData, PartnerCenterCredential config, string billingPeriod)
         {
-            _logger.LogInformation($"Procesando manifiesto de descarga para {config.CountryName}...");
+            _logger.LogInformation($"Iniciando extracción de facturación masiva NCE ({billingPeriod}) para {config.CountryName}...");
+
+            try
+            {
+                if (!statusData.TryGetProperty("manifest", out var manifest) || !manifest.TryGetProperty("blobs", out var blobs))
+                {
+                    _logger.LogWarning($"Microsoft no devolvió blobs de datos en el manifiesto para {config.CountryName}.");
+                    return;
+                }
+
+                var client = _httpClientFactory.CreateClient();
+                client.Timeout = TimeSpan.FromMinutes(15);
+
+                // PARCHE TÁCTICO: Diccionario en minúsculas estrictas
+                var tenantCache = await _context.Tenants
+                    .Where(t => t.Country == config.CountryName)
+                    .ToDictionaryAsync(t => t.MicrosoftTenantId.ToString().ToLowerInvariant(), t => t.Id);
+
+                DateTime startRange;
+                DateTime endRange;
+
+                if (billingPeriod == "current")
+                {
+                    startRange = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+                    endRange = DateTime.UtcNow.AddDays(1);
+                }
+                else
+                {
+                    int year = int.Parse(billingPeriod.Substring(0, 4));
+                    int month = int.Parse(billingPeriod.Substring(4, 2));
+                    startRange = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
+                    endRange = startRange.AddMonths(1).AddTicks(-1);
+                }
+
+                _logger.LogInformation($"Limpiando colisiones para el periodo {billingPeriod} en {config.CountryName}...");
+
+                var tenantIds = tenantCache.Values.ToList();
+                await _context.PCUsageRecords
+                    .Where(r => tenantIds.Contains(r.TenantId) && r.UsageDate >= startRange && r.UsageDate <= endRange)
+                    .ExecuteDeleteAsync();
+
+                _logger.LogInformation($"Purga completada. Iniciando inyección de datos frescos...");
+
+                foreach (var blob in blobs.EnumerateArray())
+                {
+                    string downloadUrl = blob.GetProperty("url").GetString() ?? string.Empty;
+                    if (string.IsNullOrEmpty(downloadUrl)) continue;
+
+                    _logger.LogInformation($"Descargando bloque de datos particionado para {config.CountryName}...");
+
+                    using var response = await client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        _logger.LogError($"Fallo la descarga para {config.CountryName}. Status HTTP: {response.StatusCode}");
+                        continue;
+                    }
+
+                    using var stream = await response.Content.ReadAsStreamAsync();
+                    using var reader = new System.IO.StreamReader(stream);
+
+                    string? line;
+                    int batchSize = 1000;
+                    var recordsBatch = new List<PCUsageRecord>();
+                    int totalProcessed = 0;
+                    bool isFirstLine = true;
+
+                    while ((line = await reader.ReadLineAsync()) != null)
+                    {
+                        if (string.IsNullOrWhiteSpace(line)) continue;
+
+                        // LOG FRANCOTIRADOR
+                        if (isFirstLine)
+                        {
+                            _logger.LogWarning($"[ANATOMÍA JSON] Primer registro detectado: {line.Substring(0, Math.Min(line.Length, 300))}...");
+                            isFirstLine = false;
+                        }
+
+                        using var doc = JsonDocument.Parse(line);
+                        var root = doc.RootElement;
+
+                        // SANITIZACIÓN: Todo a minúsculas antes de buscar
+                        string msTenantId = root.TryGetProperty("customerId", out var cId) ? cId.GetString() ?? "" : "";
+                        msTenantId = msTenantId.ToLowerInvariant();
+
+                        if (!tenantCache.TryGetValue(msTenantId, out int internalTenantId))
+                        {
+                            continue; // Ignoramos si realmente no es nuestro cliente
+                        }
+
+                        var record = new PCUsageRecord
+                        {
+                            TenantId = internalTenantId,
+                            SubscriptionId = root.TryGetProperty("subscriptionId", out var sId) && sId.ValueKind != JsonValueKind.Null ? Guid.Parse(sId.GetString()!) : Guid.Empty,
+
+                            UsageDate = root.TryGetProperty("date", out var dateEl) && dateEl.ValueKind != JsonValueKind.Null ? dateEl.GetDateTime() :
+                                        (root.TryGetProperty("chargeStartDate", out var cDateEl) && cDateEl.ValueKind != JsonValueKind.Null ? cDateEl.GetDateTime() : DateTime.UtcNow),
+
+                            Publisher = root.TryGetProperty("publisherName", out var pubEl) ? pubEl.GetString() ?? "Microsoft" : "Microsoft",
+                            ChargeType = root.TryGetProperty("chargeType", out var chargeEl) ? chargeEl.GetString() ?? "Usage" : "Usage",
+
+                            ProductName = root.TryGetProperty("productName", out var prodEl) ? prodEl.GetString() ?? "Unknown" : "Unknown",
+                            MeterCategory = root.TryGetProperty("meterCategory", out var catEl) ? catEl.GetString() ?? "N/A" : "N/A",
+
+                            Quantity = root.TryGetProperty("quantity", out var qtyEl) && qtyEl.ValueKind != JsonValueKind.Null ? qtyEl.GetDecimal() : 0m,
+
+                            EstimatedCost = root.TryGetProperty("billingPreTaxTotal", out var preTaxEl) && preTaxEl.ValueKind != JsonValueKind.Null ? preTaxEl.GetDecimal() : 0m,
+                            BilledCost = root.TryGetProperty("billingPreTaxTotal", out var preTaxEl2) && preTaxEl2.ValueKind != JsonValueKind.Null ? preTaxEl2.GetDecimal() : 0m,
+                            MarkupPercentage = 0m,
+
+                            Currency = root.TryGetProperty("currency", out var currEl) ? currEl.GetString() ?? "USD" : "USD",
+                            ProviderSource = "PartnerCenter_NCE_Graph",
+
+                            ResourceId = root.TryGetProperty("resourceId", out var resIdEl) && resIdEl.ValueKind != JsonValueKind.Null ? resIdEl.GetString() : null,
+                            ResourceName = root.TryGetProperty("resourceName", out var resNameEl) && resNameEl.ValueKind != JsonValueKind.Null ? resNameEl.GetString() : null,
+                            TagsJson = root.TryGetProperty("tags", out var tagsEl) && tagsEl.ValueKind != JsonValueKind.Null ? tagsEl.GetRawText() : null
+                        };
+
+                        recordsBatch.Add(record);
+                        totalProcessed++;
+
+                        if (recordsBatch.Count >= batchSize)
+                        {
+                            _context.PCUsageRecords.AddRange(recordsBatch);
+                            await _context.SaveChangesAsync();
+                            recordsBatch.Clear();
+                        }
+                    }
+
+                    if (recordsBatch.Any())
+                    {
+                        _context.PCUsageRecords.AddRange(recordsBatch);
+                        await _context.SaveChangesAsync();
+                    }
+
+                    _logger.LogInformation($"[ÉXITO] Extracción NCE completada para {config.CountryName}. {totalProcessed} registros almacenados en silos FinOps.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Fallo de infraestructura en la extracción asíncrona para {config.CountryName}: {ex.Message}");
+            }
         }
 
-        // --- AYUDANTES DE AUTENTICACIÓN Y HTTP ---
         private async Task<AuthenticationResult> GetTokenAsync(PartnerCenterCredential config, bool isGraph)
         {
             var plainTextSecret = _protector.Unprotect(config.ClientSecret);
