@@ -43,6 +43,8 @@ namespace Coem.Cmp.Infra.Data
         public DbSet<Permission> Permissions { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
+        // --- GEstion de categorias ---
+        public DbSet<CategoryDefinition> CategoryDefinitions { get; set; }
 
         // --- Categorias De Productos CSP --- 
         public DbSet<CategoryMapping> CategoryMappings { get; set; }
