@@ -12,7 +12,6 @@ namespace Coem.Cmp.Worker
         private readonly IPartnerCenterSyncService _pcSyncService;
         private readonly IAzureDirectBillingService _azureDirectService;
 
-        // Inyección de dependencias de todos los motores
         public NightlyBillingFunction(
             ILogger<NightlyBillingFunction> logger,
             IPartnerCenterSyncService pcSyncService,
@@ -23,49 +22,57 @@ namespace Coem.Cmp.Worker
             _azureDirectService = azureDirectService;
         }
 
-        [Function("SyncDailyUsage")] // Renombrado a uso diario para reflejar el modelo híbrido
+        [Function("SyncDailyUsage")]
         public async Task Run([TimerTrigger("0 0 2 * * *")] TimerInfo myTimer)
         {
-            _logger.LogInformation($"[ORQUESTADOR HÍBRIDO] Iniciando motor automatizado a las: {DateTime.UtcNow} UTC");
+            _logger.LogInformation($"[ORQUESTADOR HÍBRIDO ZENITH] Iniciando ciclo de ejecución: {DateTime.UtcNow} UTC");
 
             try
             {
                 // ==========================================================
-                // VÍA 1: LA VERDAD FINANCIERA (Partner Center & Graph API)
+                // FASE 1: INFRAESTRUCTURA DE CLIENTES
                 // ==========================================================
-                _logger.LogInformation("Fase 1: Sincronizando clientes y suscripciones CSP...");
+                _logger.LogInformation("Fase 1: Sincronizando metadatos de clientes CSP...");
                 await _pcSyncService.SyncCustomersAsync();
+
+                // ==========================================================
+                // FASE 1.5: MÓDULO SaaS (M365, Copilot, Dynamics)
+                // ==========================================================
+                _logger.LogInformation("Fase 1.5: Extrayendo inventario de licencias SaaS...");
+                // Este motor es vital para el flujo de caja recurrente de Coem
+                await _pcSyncService.SyncSaaSSubscriptionsAsync();
+
+                // ==========================================================
+                // FASE 2: CONSUMO AZURE - VÍA FINANCIERA (Graph API)
+                // ==========================================================
+                _logger.LogInformation("Fase 2: Sincronizando suscripciones Azure y facturación oficial...");
                 await _pcSyncService.SyncSubscriptionsAsync();
 
-                _logger.LogInformation("Fase 2: Extrayendo facturación financiera (Graph)...");
-                // Intentamos traer la verdad contable. Si Microsoft lo bloquea por cierre, el log lo reportará silenciosamente.
+                // Intento de descarga de archivos NCE. Maneja el 'limbo' de inicio de mes automáticamente.
                 await _pcSyncService.SyncNightlyUsageAsync("current");
 
-
                 // ==========================================================
-                // VÍA 1.5: EL RADAR OPERATIVO CSP (El Torniquete de Tiempo Real)
+                // FASE 2.5: CONSUMO AZURE - VÍA OPERATIVA (Radar CSP)
                 // ==========================================================
-                _logger.LogInformation("Fase 2.5: Extrayendo consumo operativo (Radar CSP) vía Cost Management...");
-                // Esta es la línea vital que salva la visibilidad durante los 15 días de apagón de Microsoft
+                _logger.LogInformation("Fase 2.5: Extrayendo consumo en tiempo real (Torniquete CSP)...");
+                // Esta fase salva la visibilidad durante el cierre de Microsoft
                 await _pcSyncService.SyncCspOperationalConsumptionAsync();
 
-
                 // ==========================================================
-                // VÍA 2: EL RADAR EXTERNO/BYOT (Azure Cost Management Directo)
+                // FASE 3 y 4: ENTORNOS EXTERNOS / BYOT (Azure Direct)
                 // ==========================================================
-                _logger.LogInformation("Fase 3: Sincronizando metadatos de entornos directos (Azure Direct)...");
+                _logger.LogInformation("Fase 3: Sincronizando metadatos de entornos directos...");
                 await _azureDirectService.SyncDirectSubscriptionsAsync();
 
-                _logger.LogInformation("Fase 4: Extrayendo consumo operativo externo acumulado del mes...");
+                _logger.LogInformation("Fase 4: Extrayendo consumo operativo de entornos externos...");
                 await _azureDirectService.SyncDailyConsumptionAsync();
 
-
-                _logger.LogInformation("[ORQUESTADOR HÍBRIDO] Ciclo de facturación completado con éxito.");
+                _logger.LogInformation("[ORQUESTADOR HÍBRIDO] Ciclo completado con éxito.");
             }
             catch (Exception ex)
             {
-                // Propagación crítica para que Application Insights y Azure registren la caída
-                _logger.LogError($"Fallo crítico en la ejecución del orquestador: {ex.Message}");
+                _logger.LogError($"[FALLO CRÍTICO] El orquestador se detuvo: {ex.Message}");
+                // Re-lanzamos para que Azure Functions registre el reintento o la falla en el portal
                 throw;
             }
         }

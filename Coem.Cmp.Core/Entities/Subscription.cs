@@ -18,5 +18,10 @@
         public required string Category { get; set; } // "AP", "AL" o "Colab"
         public decimal Markup { get; set; }
         public DateTime? EffectiveDate { get; set; }
+
+        // Modulo SaaS 
+        public int Quantity { get; set; } // Vital para SaaS
+        public string? BillingCycle { get; set; } // monthly, annual, etc.
+        public bool IsSaaS => Category != "AZ"; // Lógica simple para distinguir
     }
 }
