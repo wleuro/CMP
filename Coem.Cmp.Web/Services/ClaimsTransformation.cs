@@ -52,12 +52,12 @@ namespace Coem.Cmp.Web.Services
 
             if (string.IsNullOrEmpty(coemTenantId))
             {
-                _logger.LogCritical("Zenith Alert: 'CmpSettings:CoemTenantId' no está configurado en Key Vault/Appsettings.");
+                _logger.LogCritical("Alerta de Configuración: 'CmpSettings:CoemTenantId' no está configurado en Key Vault/Appsettings.");
             }
 
             if (msTenantIdClaim.Equals(coemTenantId, StringComparison.OrdinalIgnoreCase))
             {
-                // ES STAFF DE COEM: Acceso Global
+                // ES STAFF DE COEM: Asignamos Global por defecto (Se ajustará en el Paso 4 si es necesario)
                 newIdentity.AddClaim(new Claim(ClaimTypes.Role, "CoemStaff"));
                 newIdentity.AddClaim(new Claim("CmpScope", "Global"));
                 _logger.LogDebug($"Usuario STAFF detectado: {email}");
@@ -86,7 +86,7 @@ namespace Coem.Cmp.Web.Services
                 }
             }
 
-            // 4. SINCRONIZACIÓN JIT Y ROLES INTERNOS
+            // 4. SINCRONIZACIÓN JIT Y AJUSTE DE ROLES INTERNOS
             await SynchronizeInternalProfile(newIdentity, email, nameFromToken);
 
             return clone;
@@ -107,10 +107,37 @@ namespace Coem.Cmp.Web.Services
                     await _context.SaveChangesAsync();
                 }
 
-                // Inyectamos el rol granular de la base de datos (Admin, TAM, etc.)
                 if (profile.Role != null)
                 {
+                    // Inyectamos el rol matriz
                     newIdentity.AddClaim(new Claim(ClaimTypes.Role, profile.Role.Name));
+
+                    // REGLA 1: FILTRO TERRITORIAL PARA COMERCIALES
+                    if (profile.Role.Name == "Comercial")
+                    {
+                        // Removemos el acceso global que se le dio en el Paso 3
+                        var scopeClaim = newIdentity.FindFirst("CmpScope");
+                        if (scopeClaim != null)
+                        {
+                            newIdentity.RemoveClaim(scopeClaim);
+                        }
+
+                        // Asignamos el alcance regional y su país específico
+                        newIdentity.AddClaim(new Claim("CmpScope", "Regional"));
+
+                        // NOTA: Asegúrate de que la entidad UserProfile tenga la propiedad Country
+                        if (!string.IsNullOrEmpty(profile.Country))
+                        {
+                            newIdentity.AddClaim(new Claim("CmpCountry", profile.Country));
+                        }
+                    }
+
+                    // REGLA 2: PERMISOS DE ESCRITURA PARA OPERACIONES
+                    if (profile.Role.Name == "Operaciones")
+                    {
+                        newIdentity.AddClaim(new Claim("CmpPermission", "Markup_Write"));
+                        newIdentity.AddClaim(new Claim("CmpPermission", "Tenant_Setup"));
+                    }
                 }
             }
         }

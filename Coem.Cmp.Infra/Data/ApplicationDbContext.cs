@@ -1,14 +1,28 @@
 ﻿using Coem.Cmp.Core.Entities;
+using Coem.Cmp.Core.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace Coem.Cmp.Infra.Data
 {
     public class ApplicationDbContext : DbContext
     {
-        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+        private readonly ITenantContext? _tenantContext;
+
+        // Inyectamos el contexto de identidad. 
+        // Lo hacemos opcional (null) para que el Worker o las Migraciones (que no tienen usuario web) no fallen.
+        public ApplicationDbContext(
+            DbContextOptions<ApplicationDbContext> options,
+            ITenantContext? tenantContext = null)
             : base(options)
         {
+            _tenantContext = tenantContext;
         }
+
+        // Propiedades de evaluación segura: EF Core las lee en tiempo real para armar el SQL.
+        // Si no hay contexto (Worker), asumimos "Global" para que el proceso corra sin bloqueos.
+        public string CurrentScope => _tenantContext?.Scope ?? "Global";
+        public int? CurrentTenantId => _tenantContext?.CurrentTenantId;
+        public string? CurrentCountry => _tenantContext?.CurrentCountry;
 
         // --- DOMINIO CSP (COEM NATIVO) ---
         public DbSet<Tenant> Tenants { get; set; }
@@ -35,6 +49,32 @@ namespace Coem.Cmp.Infra.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            // ====================================================================
+            // 🛡️ LÓGICA ZENITH: GLOBAL QUERY FILTERS (AISLAMIENTO DE DATOS)
+            // ====================================================================
+
+            modelBuilder.Entity<Tenant>().HasQueryFilter(t =>
+                CurrentScope == "Global" ||
+                (CurrentScope == "Regional" && t.Country == CurrentCountry) ||
+                (CurrentScope == "SingleTenant" && t.Id == CurrentTenantId)
+            );
+
+            modelBuilder.Entity<Subscription>().HasQueryFilter(s =>
+                CurrentScope == "Global" ||
+                (CurrentScope == "Regional" && s.Tenant != null && s.Tenant.Country == CurrentCountry) ||
+                (CurrentScope == "SingleTenant" && s.TenantId == CurrentTenantId)
+            );
+
+            modelBuilder.Entity<ExternalSubscription>().HasQueryFilter(e =>
+                CurrentScope == "Global" ||
+                (CurrentScope == "Regional" && e.Tenant != null && e.Tenant.Country == CurrentCountry) ||
+                (CurrentScope == "SingleTenant" && e.TenantId == CurrentTenantId)
+            );
+
+            // ====================================================================
+            // CONFIGURACIONES EXISTENTES (MANTENIDAS INTACTAS)
+            // ====================================================================
 
             // 1. TENANTS: Unicidad para evitar duplicados de identidad
             modelBuilder.Entity<Tenant>()
@@ -98,7 +138,7 @@ namespace Coem.Cmp.Infra.Data
 
                 // Relación con Rol - Configuración explícita
                 entity.HasOne(u => u.Role)
-                      .WithMany(r => r.Users)  // ✅ Especificar la navegación inversa
+                      .WithMany(r => r.Users)
                       .HasForeignKey(u => u.RoleId)
                       .OnDelete(DeleteBehavior.Restrict);
             });
@@ -115,20 +155,24 @@ namespace Coem.Cmp.Infra.Data
         {
             modelBuilder.Entity<T>(entity =>
             {
+                // 🛡️ ZENITH: Filtro Global aplicado dinámicamente a tablas de consumo masivo
+                entity.HasQueryFilter(e =>
+                    CurrentScope == "Global" ||
+                    (CurrentScope == "Regional" && e.Tenant != null && e.Tenant.Country == CurrentCountry) ||
+                    (CurrentScope == "SingleTenant" && e.TenantId == CurrentTenantId)
+                );
+
                 entity.HasKey(e => e.Id);
 
                 // --- 1. EL ÍNDICE DIOS (Covering Index) ---
-                // Vital para agrupar costos por cliente y mes en milisegundos.
                 entity.HasIndex(e => new { e.TenantId, e.UsageDate, e.SubscriptionId })
                       .IncludeProperties(e => new { e.BilledCost, e.EstimatedCost, e.ResourceName, e.ChargeType });
 
                 // --- 2. ÍNDICES FINOPS ---
-                // Para consultas rápidas de autogestión sin tocar el JSON
                 entity.HasIndex(e => e.FinOpsEnvironment);
                 entity.HasIndex(e => e.FinOpsCostCenter);
 
                 // --- 3. AISLAMIENTO MULTI-TENANT ---
-                // Obliga a que cada registro de consumo pertenezca a un cliente real
                 entity.HasOne(e => e.Tenant)
                       .WithMany()
                       .HasForeignKey(e => e.TenantId)
