@@ -1,0 +1,98 @@
+﻿@model Coem.Cmp.Web.Areas.Admin.ViewModels.UserCreateViewModel
+
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-person-plus-fill me-2"></i>Provisionar Identidad Zenith</h5>
+                </div>
+                <div class="card-body p-4">
+                    <form asp-action="Create" method="post">
+                        
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <label asp-for="Upn" class="form-label fw-bold"></label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-microsoft"></i></span>
+                                    <input asp-for="Upn" class="form-control" placeholder="usuario@coem.la o admin@cliente.com" autocomplete="off" />
+                                </div>
+                                <span asp-validation-for="Upn" class="text-danger small"></span>
+                                <div class="form-text">El UPN debe coincidir exactamente con el correo de Entra ID.</div>
+                            </div>
+                        </div>
+
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <label asp-for="RoleId" class="form-label fw-bold"></label>
+                                <select asp-for="RoleId" asp-items="ViewBag.Roles" class="form-select" id="roleSelect">
+                                    <option value="">-- Seleccione el nivel de acceso --</option>
+                                </select>
+                                <span asp-validation-for="RoleId" class="text-danger small"></span>
+                            </div>
+                        </div>
+
+                        <div class="row mb-4 d-none" id="countryPanel">
+                            <div class="col-md-12">
+                                <label asp-for="Country" class="form-label fw-bold text-primary"></label>
+                                <select asp-for="Country" asp-items="ViewBag.Countries" class="form-select">
+                                    <option value="">-- Seleccione Territorio --</option>
+                                </select>
+                                <span asp-validation-for="Country" class="text-danger small"></span>
+                            </div>
+                        </div>
+
+                        <div class="row mb-4 d-none" id="tenantPanel">
+                            <div class="col-md-12">
+                                <label asp-for="TenantId" class="form-label fw-bold text-success"></label>
+                                <select asp-for="TenantId" asp-items="ViewBag.Tenants" class="form-select">
+                                    <option value="">-- Seleccione la Organización --</option>
+                                </select>
+                                <span asp-validation-for="TenantId" class="text-danger small"></span>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end border-top pt-3">
+                            <a asp-action="Index" class="btn btn-light me-2">Cancelar</a>
+                            <button type="submit" class="btn btn-warning fw-bold px-4">Guardar Identidad</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const roleSelect = document.getElementById('roleSelect');
+            const countryPanel = document.getElementById('countryPanel');
+            const tenantPanel = document.getElementById('tenantPanel');
+
+            function togglePanels() {
+                // Obtener el texto del rol seleccionado (ej. "Comercial", "TAM", "Client Admin")
+                const selectedText = roleSelect.options[roleSelect.selectedIndex].text;
+
+                // Resetear paneles
+                countryPanel.classList.add('d-none');
+                tenantPanel.classList.add('d-none');
+
+                if (selectedText === "Comercial") {
+                    countryPanel.classList.remove('d-none');
+                } 
+                else if (selectedText.startsWith("Client")) {
+                    tenantPanel.classList.remove('d-none');
+                }
+            }
+
+            // Escuchar cambios
+            roleSelect.addEventListener('change', togglePanels);
+            
+            // Ejecutar al cargar por si hay un error de validación y la página se recarga
+            togglePanels();
+        });
+    </script>
+}

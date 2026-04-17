@@ -1,166 +1,133 @@
-﻿using Coem.Cmp.Core.Entities;
-using Coem.Cmp.Infra.Data;
+﻿using Coem.Cmp.Infra.Data;
+using Coem.Cmp.Core.Entities;
 using Coem.Cmp.Web.Areas.Admin.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Graph;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace Coem.Cmp.Web.Areas.Admin.Controllers
 {
     [Area("Admin")]
-    [Authorize]
+    [Authorize(Policy = "TenantSetup")]
     public class UsersController : Controller
     {
         private readonly ApplicationDbContext _context;
-        private readonly IConfiguration _config;
-        private readonly GraphServiceClient _graphClient;
 
-        public UsersController(ApplicationDbContext context, IConfiguration config, GraphServiceClient graphClient)
+        public UsersController(ApplicationDbContext context)
         {
             _context = context;
-            _config = config;
-            _graphClient = graphClient;
         }
 
+        // 1. EL LISTADO MAESTRO (Sin esto el RedirectToAction fallaba)
+        [HttpGet]
         public async Task<IActionResult> Index()
         {
             var users = await _context.UserProfiles
-                .AsNoTracking()
                 .Include(u => u.Role)
                 .Include(u => u.Tenant)
-                .Select(u => new UserListViewModel
-                {
-                    Id = u.Id, // Mapeo Guid a Guid (Saneado)
-                    Email = u.Upn,
-                    DisplayName = string.IsNullOrEmpty(u.DisplayName) ? "Pendiente Login" : u.DisplayName,
-                    RoleName = u.Role != null ? u.Role.Name : "Sin Rol",
-                    TenantName = u.Tenant != null ? u.Tenant.Name : "Error de Silo",
-                    IsActive = u.IsActive,
-                    RoleId = u.RoleId, // int a int
-                    TenantId = u.TenantId ?? 0 // int? a int con fallback
-                })
-                .OrderByDescending(u => u.IsActive).ThenBy(u => u.TenantName)
+                .OrderBy(u => u.Upn)
                 .ToListAsync();
-
-            // ... (Carga de Roles y Tenants JSON igual que antes)
-            var roles = await _context.Roles.AsNoTracking().ToListAsync();
-            ViewBag.RolesJson = System.Text.Json.JsonSerializer.Serialize(roles.Select(r => new { Id = r.Id, Name = r.Name, IsExternal = r.Name.StartsWith("Client") }));
-            var tenants = await _context.Tenants.AsNoTracking().OrderBy(t => t.Name).ToListAsync();
-            string coemMasterTenantId = _config["AzureAd:TenantId"] ?? string.Empty;
-            ViewBag.TenantsJson = System.Text.Json.JsonSerializer.Serialize(tenants.Select(t => new {
-                Id = t.Id,
-                DisplayName = t.MicrosoftTenantId.ToString().Equals(coemMasterTenantId, StringComparison.OrdinalIgnoreCase) ? t.Name : $"{t.Name} ({t.Country})",
-                MicrosoftTenantId = t.MicrosoftTenantId.ToString()
-            }));
 
             return View(users);
         }
 
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(Guid Id, int RoleId, int TenantId) // <-- Guid Id
+        [HttpGet]
+        public async Task<IActionResult> Create()
         {
-            var user = await _context.UserProfiles.FindAsync(Id);
-            if (user == null) return NotFound();
-
-            user.RoleId = RoleId;
-            user.TenantId = TenantId;
-            await _context.SaveChangesAsync();
-
-            TempData["SuccessMessage"] = "Identidad actualizada.";
-            return RedirectToAction(nameof(Index));
-        }
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Delete(Guid Id) // <-- Guid Id para eliminar
-        {
-            var user = await _context.UserProfiles.FindAsync(Id);
-            if (user == null) return NotFound();
-
-            if (user.Upn.Equals(User.Identity?.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                TempData["ErrorMessage"] = "No puedes eliminar tu propio perfil.";
-                return RedirectToAction(nameof(Index));
-            }
-
-            _context.UserProfiles.Remove(user);
-            await _context.SaveChangesAsync();
-
-            TempData["SuccessMessage"] = "Identidad eliminada correctamente.";
-            return RedirectToAction(nameof(Index));
+            await PopulateDropdownsAsync();
+            return View(new UserCreateViewModel { Upn = string.Empty });
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(UserCreateViewModel model)
         {
-            if (!ModelState.IsValid)
+            var role = await _context.Roles.FindAsync(model.RoleId);
+
+            // Lógica de purga de seguridad: El backend no confía en el frontend.
+            if (role != null)
             {
-                TempData["ErrorMessage"] = "Por favor completa todos los campos requeridos.";
+                if (role.Name != "Comercial") model.Country = null;
+
+                bool isClientRole = role.Name.StartsWith("Client");
+                if (!isClientRole) model.TenantId = null;
+
+                // Validaciones condicionales estrictas
+                if (role.Name == "Comercial" && string.IsNullOrEmpty(model.Country))
+                    ModelState.AddModelError("Country", "Un Comercial requiere un país asignado.");
+
+                if (isClientRole && !model.TenantId.HasValue)
+                    ModelState.AddModelError("TenantId", "Un perfil de cliente requiere un Tenant asignado.");
+            }
+
+            if (ModelState.IsValid)
+            {
+                var cleanUpn = model.Upn.Trim().ToLower();
+
+                // 2. VALIDACIÓN DE DUPLICADOS (Evita colapso de Entity Framework)
+                bool exists = await _context.UserProfiles.AnyAsync(u => u.Upn == cleanUpn);
+                if (exists)
+                {
+                    ModelState.AddModelError("Upn", "Esta identidad ya se encuentra provisionada en el sistema.");
+                    await PopulateDropdownsAsync();
+                    return View(model);
+                }
+
+                // Extraer DisplayName del email (parte antes del @)
+                var displayName = cleanUpn.Contains("@") ? cleanUpn.Split("@")[0] : cleanUpn;
+
+                var newUser = new UserProfile
+                {
+                    Upn = cleanUpn,
+                    DisplayName = displayName,
+                    RoleId = model.RoleId,
+                    Country = model.Country,
+                    TenantId = model.TenantId,
+                    IsActive = true
+                };
+
+                _context.UserProfiles.Add(newUser);
+                await _context.SaveChangesAsync();
+
+                // Mensaje limpio para la operación del equipo (Sin jergas)
+                TempData["Success"] = $"Identidad {newUser.Upn} provisionada exitosamente.";
                 return RedirectToAction(nameof(Index));
             }
 
-            // Verificar si el usuario ya existe
-            var existingUser = await _context.UserProfiles.FirstOrDefaultAsync(u => u.Upn == model.Upn);
-            if (existingUser != null)
-            {
-                TempData["ErrorMessage"] = "Este usuario ya existe en el sistema.";
-                return RedirectToAction(nameof(Index));
-            }
-
-            // Obtener DisplayName desde Microsoft Graph
-            string displayName = model.Upn;
-            try
-            {
-                var graphUser = await _graphClient.Users[model.Upn].GetAsync();
-                displayName = graphUser?.DisplayName ?? model.Upn;
-            }
-            catch (Exception)
-            {
-                // Si falla, usar el UPN como fallback
-                TempData["WarningMessage"] = "No se pudo obtener el nombre de Graph, usando email.";
-            }
-
-            // Crear nuevo usuario
-            var newUser = new UserProfile
-            {
-                Upn = model.Upn,
-                DisplayName = displayName,
-                RoleId = model.RoleId,
-                TenantId = model.TenantId,
-                IsActive = true
-            };
-
-            _context.UserProfiles.Add(newUser);
-            await _context.SaveChangesAsync();
-
-            TempData["SuccessMessage"] = $"Identidad '{displayName}' creada exitosamente.";
-            return RedirectToAction(nameof(Index));
+            await PopulateDropdownsAsync();
+            return View(model);
         }
 
+        // 3. SOFT DELETE (Bloquear acceso sin destruir la historia financiera)
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ToggleStatus(Guid Id) // <-- Guid Id
+        public async Task<IActionResult> ToggleStatus(int id)
         {
-            var user = await _context.UserProfiles.FindAsync(Id);
+            var user = await _context.UserProfiles.FindAsync(id);
             if (user == null) return NotFound();
 
-            if (user.Upn.Equals(User.Identity?.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                TempData["ErrorMessage"] = "No puedes revocar tu propio acceso.";
-                return RedirectToAction(nameof(Index));
-            }
-
+            // Si es tu propio usuario, podrías poner una validación extra aquí para no auto-bloquearte
             user.IsActive = !user.IsActive;
             await _context.SaveChangesAsync();
 
+            TempData["Success"] = $"Estado de acceso para {user.Upn} actualizado.";
             return RedirectToAction(nameof(Index));
+        }
+
+        private async Task PopulateDropdownsAsync()
+        {
+            var roles = await _context.Roles.OrderBy(r => r.Name).ToListAsync();
+            ViewBag.Roles = roles.Select(r => new SelectListItem
+            {
+                Value = r.Id.ToString(),
+                Text = r.Name
+            }).ToList();
+
+            ViewBag.Tenants = new SelectList(await _context.Tenants.OrderBy(t => t.Name).ToListAsync(), "Id", "Name");
+
+            // Si en el futuro tienes una tabla de Territorios, sácalo de ahí. Por ahora estático.
+            ViewBag.Countries = new SelectList(new List<string> { "Colombia", "Ecuador", "Perú", "Panamá", "Regional" });
         }
     }
 }
