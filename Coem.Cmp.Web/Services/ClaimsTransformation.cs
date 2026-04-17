@@ -109,10 +109,26 @@ namespace Coem.Cmp.Web.Services
 
                 if (profile.Role != null)
                 {
-                    // Inyectamos el rol matriz
+                    // 🛡️ ZENITH: Inyectamos el Rol estándar y el CmpRole Normalizado (sin espacios) para las Policies
                     newIdentity.AddClaim(new Claim(ClaimTypes.Role, profile.Role.Name));
+                    newIdentity.AddClaim(new Claim("CmpRole", profile.Role.Name.Replace(" ", "")));
 
-                    // REGLA 1: FILTRO TERRITORIAL PARA COMERCIALES
+                    // 🛡️ ZENITH: PODER ABSOLUTO PARA GLOBAL ADMIN
+                    if (profile.Role.Name == "Global Admin" || profile.Role.Name == "GlobalAdmin")
+                    {
+                        newIdentity.AddClaim(new Claim("CmpPermission", "Markup_Write"));
+                        newIdentity.AddClaim(new Claim("CmpPermission", "Tenant_Setup"));
+                        // El scope ya es 'Global' por el paso 3
+                    }
+
+                    // 🛡️ ZENITH: PERMISOS ESPECÍFICOS PARA OPERACIONES
+                    if (profile.Role.Name == "Operaciones")
+                    {
+                        newIdentity.AddClaim(new Claim("CmpPermission", "Markup_Write"));
+                        newIdentity.AddClaim(new Claim("CmpPermission", "Tenant_Setup"));
+                    }
+
+                    // 🛡️ ZENITH: FILTRO TERRITORIAL PARA COMERCIALES
                     if (profile.Role.Name == "Comercial")
                     {
                         // Removemos el acceso global que se le dio en el Paso 3
@@ -125,18 +141,10 @@ namespace Coem.Cmp.Web.Services
                         // Asignamos el alcance regional y su país específico
                         newIdentity.AddClaim(new Claim("CmpScope", "Regional"));
 
-                        // NOTA: Asegúrate de que la entidad UserProfile tenga la propiedad Country
                         if (!string.IsNullOrEmpty(profile.Country))
                         {
                             newIdentity.AddClaim(new Claim("CmpCountry", profile.Country));
                         }
-                    }
-
-                    // REGLA 2: PERMISOS DE ESCRITURA PARA OPERACIONES
-                    if (profile.Role.Name == "Operaciones")
-                    {
-                        newIdentity.AddClaim(new Claim("CmpPermission", "Markup_Write"));
-                        newIdentity.AddClaim(new Claim("CmpPermission", "Tenant_Setup"));
                     }
                 }
             }

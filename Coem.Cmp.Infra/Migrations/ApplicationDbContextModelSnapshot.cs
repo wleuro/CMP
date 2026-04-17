@@ -102,6 +102,7 @@ namespace Coem.Cmp.Infra.Migrations
                         .HasColumnType("nvarchar(3)");
 
                     b.Property<decimal>("ProviderCost")
+                        .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
 
                     b.Property<string>("ResourceGroup")
@@ -110,6 +111,7 @@ namespace Coem.Cmp.Infra.Migrations
                         .HasColumnType("nvarchar(200)");
 
                     b.Property<decimal>("RetailAmount")
+                        .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
 
                     b.Property<string>("ServiceName")
@@ -128,9 +130,9 @@ namespace Coem.Cmp.Infra.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId");
+                    b.HasIndex("TenantId", "UsageDate");
 
-                    b.ToTable("CostRecord");
+                    b.ToTable("CostRecords");
                 });
 
             modelBuilder.Entity("Coem.Cmp.Core.Entities.ExternalSubscription", b =>
@@ -161,9 +163,14 @@ namespace Coem.Cmp.Infra.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("TenantId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AzureDirectCredentialId");
+
+                    b.HasIndex("TenantId");
 
                     b.ToTable("ExternalSubscriptions");
                 });
@@ -550,9 +557,14 @@ namespace Coem.Cmp.Infra.Migrations
 
             modelBuilder.Entity("Coem.Cmp.Core.Entities.UserProfile", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Country")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
@@ -586,9 +598,9 @@ namespace Coem.Cmp.Infra.Migrations
             modelBuilder.Entity("Coem.Cmp.Core.Entities.CostRecord", b =>
                 {
                     b.HasOne("Coem.Cmp.Core.Entities.Tenant", "Tenant")
-                        .WithMany("CostRecords")
+                        .WithMany()
                         .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Tenant");
@@ -602,7 +614,13 @@ namespace Coem.Cmp.Infra.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Coem.Cmp.Core.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId");
+
                     b.Navigation("Credential");
+
+                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("Coem.Cmp.Core.Entities.ExternalUsageRecord", b =>
@@ -689,8 +707,6 @@ namespace Coem.Cmp.Infra.Migrations
 
             modelBuilder.Entity("Coem.Cmp.Core.Entities.Tenant", b =>
                 {
-                    b.Navigation("CostRecords");
-
                     b.Navigation("Subscriptions");
                 });
 #pragma warning restore 612, 618

@@ -4,11 +4,13 @@ namespace Coem.Cmp.Core.Entities
 {
     public class UserProfile
     {
-        public Guid Id { get; set; } = Guid.NewGuid();
-        public required string Upn { get; set; } // El UserPrincipalName o Email que llega de Entra ID
+        // 🛡️ ZENITH: Cambiamos de Guid a int para consistencia con Role y Tenant
+        public int Id { get; set; }
+
+        public required string Upn { get; set; }
         public required string DisplayName { get; set; }
         public bool IsActive { get; set; } = true;
-        public string? Country { get; set; } // País del usuario para filtrado regional
+        public string? Country { get; set; }
 
         public int RoleId { get; set; }
         public Role? Role { get; set; }

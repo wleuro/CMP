@@ -7,6 +7,7 @@ namespace Coem.Cmp.Core.Entities
     {
         public long Id { get; set; }
 
+        [ForeignKey(nameof(Tenant))]
         public int TenantId { get; set; }
         public Tenant? Tenant { get; set; } // Navegación
 

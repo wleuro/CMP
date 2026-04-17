@@ -26,8 +26,8 @@ namespace Coem.Cmp.Infra.Data
                 throw new InvalidOperationException($"CRÍTICO: El TenantId en KeyVault no es válido o está vacío. Valor actual: '{configTenantId}'");
             }
 
-            // Ahora comparamos Guid con Guid
-            var coemTenant = context.Tenants.FirstOrDefault(t => t.MicrosoftTenantId == coemMasterTenantGuid);
+            // 🛡️ ZENITH: Apagamos los filtros de seguridad temporalmente para ver la base de datos real
+            var coemTenant = context.Tenants.IgnoreQueryFilters().FirstOrDefault(t => t.MicrosoftTenantId == coemMasterTenantGuid);
             if (coemTenant == null)
             {
                 coemTenant = new Tenant
@@ -43,7 +43,7 @@ namespace Coem.Cmp.Infra.Data
             }
 
             // 2. INYECTAR LA MATRIZ DE ROLES (Solo si está vacía)
-            if (!context.Roles.Any())
+            if (!context.Roles.IgnoreQueryFilters().Any())
             {
                 var roles = new Role[]
                 {
@@ -68,10 +68,10 @@ namespace Coem.Cmp.Infra.Data
             }
 
             // 3. CREAR TU PERFIL MAESTRO (CON SELLO DE SEGURIDAD ABSOLUTO)
-            var globalAdminRole = context.Roles.FirstOrDefault(r => r.Name == "Global Admin");
+            var globalAdminRole = context.Roles.IgnoreQueryFilters().FirstOrDefault(r => r.Name == "Global Admin");
             const string MyCorpEmail = "wleuro@coem.co";
 
-            if (globalAdminRole != null && !context.UserProfiles.Any(u => u.Upn == MyCorpEmail))
+            if (globalAdminRole != null && !context.UserProfiles.IgnoreQueryFilters().Any(u => u.Upn == MyCorpEmail))
             {
                 var willProfile = new UserProfile
                 {

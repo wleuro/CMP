@@ -28,6 +28,7 @@ namespace Coem.Cmp.Infra.Data
         public DbSet<Tenant> Tenants { get; set; }
         public DbSet<Subscription> Subscriptions { get; set; }
         public DbSet<PartnerCenterCredential> PartnerCenterCredentials { get; set; }
+        public DbSet<CostRecord> CostRecords { get; set; }
 
         // --- DOMINIO BYOT (GESTIÓN EXTERNA / ARM DIRECT) ---
         public DbSet<AzureDirectCredential> AzureDirectCredentials { get; set; }
@@ -72,6 +73,12 @@ namespace Coem.Cmp.Infra.Data
                 (CurrentScope == "SingleTenant" && e.TenantId == CurrentTenantId)
             );
 
+            modelBuilder.Entity<CostRecord>().HasQueryFilter(c =>
+                CurrentScope == "Global" ||
+                (CurrentScope == "Regional" && c.Tenant != null && c.Tenant.Country == CurrentCountry) ||
+                (CurrentScope == "SingleTenant" && c.TenantId == CurrentTenantId)
+            );
+
             // ====================================================================
             // CONFIGURACIONES EXISTENTES (MANTENIDAS INTACTAS)
             // ====================================================================
@@ -86,6 +93,24 @@ namespace Coem.Cmp.Infra.Data
             {
                 entity.HasIndex(s => s.Id);
                 entity.Property(s => s.Markup).HasPrecision(5, 4);
+            });
+
+            // 2.5. COST RECORDS (REGISTROS DE COSTOS CSP)
+            modelBuilder.Entity<CostRecord>(entity =>
+            {
+                entity.HasKey(c => c.Id);
+                
+                // Configuración de precisión financiera
+                entity.Property(c => c.ProviderCost).HasPrecision(18, 4);
+                entity.Property(c => c.RetailAmount).HasPrecision(18, 4);
+                
+                // Relación con Tenant
+                entity.HasOne(c => c.Tenant)
+                      .WithMany()
+                      .OnDelete(DeleteBehavior.Restrict);
+                
+                // Índice para consultas frecuentes
+                entity.HasIndex(c => new { c.TenantId, c.UsageDate });
             });
 
             // 3. EXTERNAL SUBSCRIPTIONS (BYOT)

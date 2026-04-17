@@ -1,4 +1,6 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
 namespace Coem.Cmp.Core.Entities
 {
@@ -24,14 +26,16 @@ namespace Coem.Cmp.Core.Entities
         // Para EA, a veces el ID de facturación (Enrollment Number) es diferente al Tenant ID
         [MaxLength(100)]
         public string? BillingAccountId { get; set; }
-        
+
         [Required]
         [MaxLength(50)]
         public string Country { get; set; } = "Colombia";
+
         public bool IsActive { get; set; } = true;
         public DateTime OnboardingDate { get; set; } = DateTime.UtcNow;
 
-        public ICollection<CostRecord> CostRecords { get; set; } = new List<CostRecord>();
+        // ⚠️ PURGADO: La propiedad CostRecords fue eliminada para evitar Shadow States 
+        // y proteger la memoria RAM. El consumo se consulta directo en los Silos (UsageRecords).
 
         // ¿Controles Empresariales le cobra el consumo a este cliente?
         // true = Vas a Partner Center a traer sus costos.
