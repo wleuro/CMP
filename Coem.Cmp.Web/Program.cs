@@ -1,6 +1,7 @@
 using Azure.Identity;
 using Coem.Cmp.Infra.Data;
 using Coem.Cmp.Web.Services;
+using Coem.Cmp.Core.Interfaces; // Asegúrate de que este namespace exista o ajústalo
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
@@ -45,6 +46,31 @@ builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftGraph()
     .AddInMemoryTokenCaches();
 
+// 🛡️ LÓGICA ZENITH: INYECCIÓN DE CONTEXTO MULTI-TENANT
+// OBLIGATORIO para leer los Claims del usuario en tiempo real en la capa de servicios y DB
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ITenantContext, TenantContext>();
+
+// 🛡️ LÓGICA ZENITH: POLÍTICAS DE AUTORIZACIÓN (LA MATRIZ HECHA CÓDIGO)
+builder.Services.AddAuthorization(options =>
+{
+    // Política: Visibilidad del Costo de Compra (Solo Staff, bloqueado para clientes y soporte base)
+    options.AddPolicy("ViewBaseCosts", policy =>
+        policy.RequireClaim("CmpScope", "Global", "Regional"));
+
+    // Política: Edición Financiera (Exclusivo del rol Operaciones)
+    options.AddPolicy("ManageMarkups", policy =>
+        policy.RequireClaim("CmpPermission", "Markup_Write"));
+
+    // Política: Creación y Configuración de Tenants (Branding, Logos, Asignaciones)
+    options.AddPolicy("TenantSetup", policy =>
+        policy.RequireClaim("CmpPermission", "Tenant_Setup"));
+
+    // Política: Acceso a Consola Técnica (Excluye a roles netamente financieros/comerciales)
+    options.AddPolicy("TechOps", policy =>
+        policy.RequireClaim("CmpRole", "GlobalAdmin", "TAM", "Soporte TI", "ClientAdmin", "ClientITOps"));
+});
+
 builder.Services.AddScoped<Coem.Cmp.Web.Security.AdminTenantAuthorizationFilter>();
 
 builder.Services.AddControllersWithViews(options =>
@@ -73,11 +99,11 @@ if (!string.IsNullOrEmpty(storageConnectionString))
 // =========================================================================
 // 4. REGISTRO DE MOTORES FINOPS E INTERCEPTORES
 // =========================================================================
-// Inyección del servicio actualizado con ILogger y Graph Support
 builder.Services.AddScoped<IPartnerCenterSyncService, PartnerCenterSyncService>();
 builder.Services.AddScoped<IAzureDirectBillingService, AzureDirectBillingService>();
 
-builder.Services.AddTransient<Microsoft.AspNetCore.Authentication.IClaimsTransformation, Coem.Cmp.Web.Services.ClaimsTransformation>();
+// El transformador de identidad híbrida
+builder.Services.AddTransient<Microsoft.AspNetCore.Authentication.IClaimsTransformation, ClaimsTransformation>();
 
 var app = builder.Build();
 

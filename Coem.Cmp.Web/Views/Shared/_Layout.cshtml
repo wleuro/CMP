@@ -1,3 +1,8 @@
+@using Microsoft.AspNetCore.Authorization
+@using Coem.Cmp.Core.Interfaces
+@inject IAuthorizationService AuthorizationService
+@inject ITenantContext TenantContext
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -16,65 +21,100 @@
         <aside class="sidebar shadow-lg">
             <div class="sidebar-header border-bottom">
                 <img src="~/images/logo-coem.png" alt="COEM" style="max-height: 45px; width: auto;">
-            </div>
+                </div>
 
-            <nav class="sidebar-menu mt-4">
-                <div class="menu-category">Visión General</div>
-                <a href="/" class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Home" ? "active" : "")">
-                    <i class="bi bi-grid-1x2-fill"></i> Dashboard
-                </a>
+                <div class="p-2 text-center" style="background-color: rgba(255,255,255,0.05); font-size: 0.75rem;">
+                    @if (TenantContext.Scope == "Global")
+                    {
+                        <span class="badge bg-danger w-100">ACCESO GLOBAL</span>
+                    }
+                    else if (TenantContext.Scope == "Regional")
+                    {
+                        <span class="badge bg-primary w-100">REGIÓN: @TenantContext.CurrentCountry</span>
+                    }
+                    else if (TenantContext.Scope == "SingleTenant")
+                    {
+                        <span class="badge bg-success w-100">CLIENTE MODO SEGURO</span>
+                    }
+                </div>
 
-                <div class="menu-category">Gobernanza</div>
-                <a href="/Admin/Users" class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Users" ? "active" : "")">
-                    <i class="bi bi-shield-lock-fill"></i> Identidades
-                </a>
-                <a href="/Admin/Tenants" class="nav-link-custom">
-                    <i class="bi bi-building-fill"></i> Organizaciones
-                </a>
-                <a href="/Admin/Countries" class="nav-link-custom">
-                    <i class="bi bi-building-fill"></i> Preventas
-                </a>
+                <nav class="sidebar-menu mt-3">
+                    <div class="menu-category">Visión General</div>
+                    <a href="/" class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Home" ? "active" : "")">
+                        <i class="bi bi-grid-1x2-fill"></i> Dashboard
+                    </a>
 
-                <a href="/Admin/CategoryMappings" class="nav-link-custom">
-                    <i class="bi bi-building-fill"></i> Categorias Suscripciones
-                </a>
+                    @if ((await AuthorizationService.AuthorizeAsync(User, "TenantSetup")).Succeeded)
+                    {
+                        <div class="menu-category mt-3 text-warning">Setup & Habilitación</div>
+                        <a href="/Admin/Users" class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Users" ? "active" : "")">
+                            <i class="bi bi-shield-lock-fill"></i> Identidades Coem
+                        </a>
+                        <a href="/Admin/Tenants" class="nav-link-custom">
+                            <i class="bi bi-building-fill"></i> Organizaciones / Logos
+                        </a>
+                        <a href="/Admin/Countries" class="nav-link-custom">
+                            <i class="bi bi-globe-americas"></i> Preventas / Territorios
+                        </a>
+                        <a href="/Admin/CategoryMappings" class="nav-link-custom">
+                            <i class="bi bi-tags-fill"></i> Categorías Suscripciones
+                        </a>
+                    }
 
-                <div class="menu-category">Operaciones</div>
-                <a href="/Admin/Billing" class="nav-link-custom">
-                    <i class="bi bi-graph-up-arrow"></i> FinOps Global
-                </a>
-            </nav>
+                    @if ((await AuthorizationService.AuthorizeAsync(User, "ViewBaseCosts")).Succeeded)
+                    {
+                        <div class="menu-category mt-3">Negocio Coem</div>
+                        <a href="/Admin/Billing" class="nav-link-custom">
+                            <i class="bi bi-graph-up-arrow"></i> Reportes FinOps
+                        </a>
+                    }
 
-            <div class="sidebar-footer border-top p-3">
-                @{
-                    var displayName = User.FindFirst("name")?.Value ?? User.Identity?.Name ?? "Usuario";
-                    var userInitial = displayName.FirstOrDefault().ToString().ToUpper();
-                }
+                    @if ((await AuthorizationService.AuthorizeAsync(User, "ManageMarkups")).Succeeded)
+                    {
+                        <a href="/Admin/Pricing" class="nav-link-custom text-warning fw-bold">
+                            <i class="bi bi-currency-dollar"></i> Fijación de Markups
+                        </a>
+                    }
+
+                    @if (TenantContext.Scope == "SingleTenant" && TenantContext.Role == "Client Admin")
+                    {
+                        <div class="menu-category mt-3">Mi Empresa</div>
+                        <a href="/Client/Users" class="nav-link-custom">
+                            <i class="bi bi-people-fill"></i> Gestionar mi Equipo
+                        </a>
+                    }
+                </nav>
+
+                <div class="sidebar-footer border-top p-3">
+                    @{
+                        var displayName = User.FindFirst("name")?.Value ?? User.Identity?.Name ?? "Usuario";
+                        var userInitial = displayName.FirstOrDefault().ToString().ToUpper();
+                        var userRole = TenantContext.Role ?? "Invitado";
+                    }
             
-                <div class="d-flex align-items-center gap-3">
-                    <div class="avatar-container">
-                        <!-- Avatar fallback: Mostrar siempre iniciales sin intentar cargar foto -->
-                        <div class="avatar-initials">
-                            @userInitial
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="avatar-container">
+                            <div class="avatar-initials">
+                                @userInitial
+                            </div>
+                        </div>
+                        <div class="user-info text-truncate">
+                            <div class="fw-bold text-white small" title="@displayName">@displayName</div>
+                            <div class="text-white-50" style="font-size: 0.7rem;">Rol: @userRole</div>
                         </div>
                     </div>
-                    <div class="user-info text-truncate">
-                        <div class="fw-bold text-white small" title="@displayName">@displayName</div>
-                        <div class="text-white-50" style="font-size: 0.7rem;">Sesión Entra ID</div>
-                    </div>
                 </div>
-            </div>
-        </aside>
+            </aside>
 
-        <main class="main-content">
-            <div class="container-fluid">
-                @RenderBody()
-            </div>
-        </main>
-    </div>
+            <main class="main-content">
+                <div class="container-fluid">
+                    @RenderBody()
+                </div>
+            </main>
+        </div>
 
-    <script src="~/lib/jquery/dist/jquery.min.js"></script>
-    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-    @await RenderSectionAsync("Scripts", required: false)
-</body>
+        <script src="~/lib/jquery/dist/jquery.min.js"></script>
+        <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+        @await RenderSectionAsync("Scripts", required: false)
+    </body>
 </html>
