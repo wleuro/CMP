@@ -1,6 +1,6 @@
 ﻿using Coem.Cmp.Core.Entities;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration; // Necesario para leer el Key Vault
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Linq;
 
@@ -8,25 +8,21 @@ namespace Coem.Cmp.Infra.Data
 {
     public static class DbInitializer
     {
-        // Actualizamos la firma para inyectar IConfiguration
         public static void Initialize(ApplicationDbContext context, IConfiguration config)
         {
             ArgumentNullException.ThrowIfNull(context);
             ArgumentNullException.ThrowIfNull(config);
 
-            // Aplica migraciones pendientes automáticamente. 
+            // 1. APLICAR ESQUEMA
             context.Database.Migrate();
 
-            // 1. LEER EL KEY VAULT Y ASEGURAR EL TENANT MAESTRO (COEM)
+            // 2. TENANT MAESTRO (COEM)
             string configTenantId = config["AzureAd:TenantId"] ?? string.Empty;
-
-            // Forzamos la conversión a GUID seguro
             if (!Guid.TryParse(configTenantId, out Guid coemMasterTenantGuid))
             {
-                throw new InvalidOperationException($"CRÍTICO: El TenantId en KeyVault no es válido o está vacío. Valor actual: '{configTenantId}'");
+                throw new InvalidOperationException("CRÍTICO: TenantId no válido en la configuración.");
             }
 
-            // 🛡️ ZENITH: Apagamos los filtros de seguridad temporalmente para ver la base de datos real
             var coemTenant = context.Tenants.IgnoreQueryFilters().FirstOrDefault(t => t.MicrosoftTenantId == coemMasterTenantGuid);
             if (coemTenant == null)
             {
@@ -36,53 +32,99 @@ namespace Coem.Cmp.Infra.Data
                     Name = "Controles Empresariales (Admin)",
                     DefaultDomain = "coem.co",
                     AgreementType = "CSP",
-                    Country = "Colombia"
+                    Country = "Colombia",
+                    IsActive = true,
+                    OnboardingDate = DateTime.UtcNow
                 };
                 context.Tenants.Add(coemTenant);
                 context.SaveChanges();
             }
 
-            // 2. INYECTAR LA MATRIZ DE ROLES (Solo si está vacía)
-            if (!context.Roles.IgnoreQueryFilters().Any())
+            // 3. MATRIZ DE ROLES (Verificación individual para evitar estados inconsistentes)
+            string[] requiredRoles = { "GlobalAdmin", "Operaciones", "Comercial", "Customer" };
+            foreach (var roleName in requiredRoles)
             {
-                var roles = new Role[]
+                if (!context.Roles.IgnoreQueryFilters().Any(r => r.Name == roleName))
                 {
-                    // Roles Internos (COEM)
-                    new() { Name = "Global Admin", Description = "Control total y configuración maestra", IsSystemRole = true },
-                    new() { Name = "Executive", Description = "Visión macro del Negocio y cuotas", IsSystemRole = true },
-                    new() { Name = "FinOps Global", Description = "Auditoría de márgenes y reconciliación", IsSystemRole = true },
-                    new() { Name = "TAM", Description = "Salud técnica, adopción y prospección BYOT", IsSystemRole = true },
-                    new() { Name = "Preventa / Arq.", Description = "Diseño de topologías y optimización", IsSystemRole = true },
-                    new() { Name = "Comercial", Description = "Facturación final y estado de contratos", IsSystemRole = true },
-                    new() { Name = "Soporte TI", Description = "Mantenimiento técnico sin visibilidad financiera", IsSystemRole = false },
-                    
-                    // Roles Externos (Clientes)
-                    new() { Name = "Client Admin", Description = "Autogestión total de su Tenant", IsSystemRole = true },
-                    new() { Name = "Client Financial", Description = "Facturación y ahorro", IsSystemRole = false },
-                    new() { Name = "Client IT / Ops", Description = "Inventario, alertas y Tags", IsSystemRole = false },
-                    new() { Name = "Client Viewer", Description = "Solo lectura de consumo general", IsSystemRole = true }
-                };
-
-                context.Roles.AddRange(roles);
-                context.SaveChanges();
+                    context.Roles.Add(new Role
+                    {
+                        Name = roleName,
+                        Description = $"Acceso nivel: {roleName}",
+                        IsSystemRole = true
+                    });
+                }
             }
+            context.SaveChanges();
 
-            // 3. CREAR TU PERFIL MAESTRO (CON SELLO DE SEGURIDAD ABSOLUTO)
-            var globalAdminRole = context.Roles.IgnoreQueryFilters().FirstOrDefault(r => r.Name == "Global Admin");
+            // 4. RESTAURAR TU ACCESO (Will)
+            var globalAdminRole = context.Roles.IgnoreQueryFilters()
+                .First(r => r.Name == "GlobalAdmin");
+
             const string MyCorpEmail = "wleuro@coem.co";
+            var willProfile = context.UserProfiles.IgnoreQueryFilters().FirstOrDefault(u => u.Upn == MyCorpEmail);
 
-            if (globalAdminRole != null && !context.UserProfiles.IgnoreQueryFilters().Any(u => u.Upn == MyCorpEmail))
+            if (willProfile == null)
             {
-                var willProfile = new UserProfile
+                context.UserProfiles.Add(new UserProfile
                 {
                     Upn = MyCorpEmail,
                     DisplayName = "William Leuro Velandia",
                     IsActive = true,
                     RoleId = globalAdminRole.Id,
-                    TenantId = coemTenant.Id
-                };
+                    TenantId = coemTenant.Id,
+                    Country = "Colombia"
+                });
+                context.SaveChanges();
+            }
+            else if (willProfile.RoleId != globalAdminRole.Id)
+            {
+                // Corrección de deriva de permisos
+                willProfile.RoleId = globalAdminRole.Id;
+                context.SaveChanges();
+            }
 
-                context.UserProfiles.Add(willProfile);
+            // 5. SEED DE PRUEBA: EVIDENCIA SINGLE PANE (Nombre purgado)
+            if (!context.Tenants.IgnoreQueryFilters().Any(t => t.Name == "Cliente Demo Corporativo"))
+            {
+                var demoTenant = new Tenant
+                {
+                    MicrosoftTenantId = Guid.NewGuid(),
+                    Name = "Cliente Demo Corporativo",
+                    DefaultDomain = "democorp.onmicrosoft.com",
+                    Country = "Ecuador",
+                    IsActive = true,
+                    OnboardingDate = DateTime.UtcNow
+                };
+                context.Tenants.Add(demoTenant);
+                context.SaveChanges();
+
+                context.Subscriptions.AddRange(
+                    new Subscription
+                    {
+                        TenantId = demoTenant.Id,
+                        MicrosoftSubscriptionId = Guid.NewGuid(),
+                        OfferId = "MS-O365-B-PREM",
+                        Name = "Microsoft 365 Business Premium",
+                        Category = "M365",
+                        Status = "active",
+                        Quantity = 15,
+                        CreatedDate = DateTime.UtcNow,
+                        Markup = 0.12m
+                    },
+                    new Subscription
+                    {
+                        TenantId = demoTenant.Id,
+                        MicrosoftSubscriptionId = Guid.NewGuid(),
+                        OfferId = "MS-AZR-PLAN",
+                        Name = "Azure Plan",
+                        Category = "AZ",
+                        Status = "active",
+                        Quantity = 1,
+                        IsAzureWorkload = true,
+                        CreatedDate = DateTime.UtcNow,
+                        Markup = 0.03m
+                    }
+                );
                 context.SaveChanges();
             }
         }

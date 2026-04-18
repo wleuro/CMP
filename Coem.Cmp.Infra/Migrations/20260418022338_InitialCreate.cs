@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Coem.Cmp.Infra.Migrations
 {
     /// <inheritdoc />
-    public partial class Initial_Zenith_Structure : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -18,7 +18,7 @@ namespace Coem.Cmp.Infra.Migrations
                     Id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     Alias = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    TenantId = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    TenantId = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     ClientId = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     ClientSecret = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     IsActive = table.Column<bool>(type: "bit", nullable: false),
@@ -27,6 +27,20 @@ namespace Coem.Cmp.Infra.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_AzureDirectCredentials", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "CategoryDefinitions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Code = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Name = table.Column<string>(type: "nvarchar(max)", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_CategoryDefinitions", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -177,7 +191,7 @@ namespace Coem.Cmp.Infra.Migrations
                     Status = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     AuditResult = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     LastSync = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    Markup = table.Column<decimal>(type: "decimal(5,4)", precision: 5, scale: 4, nullable: false)
+                    Markup = table.Column<decimal>(type: "decimal(18,2)", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -212,8 +226,8 @@ namespace Coem.Cmp.Infra.Migrations
                     ResourceId = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     ResourceName = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     TagsJson = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    FinOpsEnvironment = table.Column<string>(type: "nvarchar(450)", nullable: true),
-                    FinOpsCostCenter = table.Column<string>(type: "nvarchar(450)", nullable: true),
+                    FinOpsEnvironment = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    FinOpsCostCenter = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     EstimatedCost = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
                     MarkupPercentage = table.Column<decimal>(type: "decimal(5,4)", precision: 5, scale: 4, nullable: false),
                     BilledCost = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
@@ -248,8 +262,8 @@ namespace Coem.Cmp.Infra.Migrations
                     ResourceId = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     ResourceName = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     TagsJson = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    FinOpsEnvironment = table.Column<string>(type: "nvarchar(450)", nullable: true),
-                    FinOpsCostCenter = table.Column<string>(type: "nvarchar(450)", nullable: true),
+                    FinOpsEnvironment = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    FinOpsCostCenter = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     EstimatedCost = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
                     MarkupPercentage = table.Column<decimal>(type: "decimal(5,4)", precision: 5, scale: 4, nullable: false),
                     BilledCost = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
@@ -271,10 +285,12 @@ namespace Coem.Cmp.Infra.Migrations
                 name: "Subscriptions",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    MicrosoftSubscriptionId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     TenantId = table.Column<int>(type: "int", nullable: false),
                     OfferId = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    OfferName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Name = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Status = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     IsAzureWorkload = table.Column<bool>(type: "bit", nullable: false),
                     CreatedDate = table.Column<DateTime>(type: "datetime2", nullable: false),
@@ -303,8 +319,11 @@ namespace Coem.Cmp.Infra.Migrations
                         .Annotation("SqlServer:Identity", "1, 1"),
                     Upn = table.Column<string>(type: "nvarchar(450)", nullable: false),
                     DisplayName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    JobTitle = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    PhoneNumber = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     IsActive = table.Column<bool>(type: "bit", nullable: false),
                     Country = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     RoleId = table.Column<int>(type: "int", nullable: false),
                     TenantId = table.Column<int>(type: "int", nullable: true)
                 },
@@ -326,11 +345,6 @@ namespace Coem.Cmp.Infra.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_AzureDirectCredentials_TenantId",
-                table: "AzureDirectCredentials",
-                column: "TenantId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_CostRecords_TenantId_UsageDate",
                 table: "CostRecords",
                 columns: new[] { "TenantId", "UsageDate" });
@@ -346,30 +360,10 @@ namespace Coem.Cmp.Infra.Migrations
                 column: "TenantId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_ExternalUsageRecords_FinOpsCostCenter",
-                table: "ExternalUsageRecords",
-                column: "FinOpsCostCenter");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ExternalUsageRecords_FinOpsEnvironment",
-                table: "ExternalUsageRecords",
-                column: "FinOpsEnvironment");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_ExternalUsageRecords_TenantId_UsageDate_SubscriptionId",
                 table: "ExternalUsageRecords",
                 columns: new[] { "TenantId", "UsageDate", "SubscriptionId" })
                 .Annotation("SqlServer:Include", new[] { "BilledCost", "EstimatedCost", "ResourceName", "ChargeType" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_PCUsageRecords_FinOpsCostCenter",
-                table: "PCUsageRecords",
-                column: "FinOpsCostCenter");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_PCUsageRecords_FinOpsEnvironment",
-                table: "PCUsageRecords",
-                column: "FinOpsEnvironment");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PCUsageRecords_TenantId_UsageDate_SubscriptionId",
@@ -418,6 +412,9 @@ namespace Coem.Cmp.Infra.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(
+                name: "CategoryDefinitions");
+
             migrationBuilder.DropTable(
                 name: "CategoryMappings");
 

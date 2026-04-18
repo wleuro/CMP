@@ -1,7 +1,8 @@
 using Azure.Identity;
 using Coem.Cmp.Infra.Data;
 using Coem.Cmp.Web.Services;
-using Coem.Cmp.Core.Interfaces; // Asegúrate de que este namespace exista o ajústalo
+using Coem.Cmp.Core.Interfaces;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
@@ -9,11 +10,12 @@ using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
+using System.Security.Claims; // Necesario para ClaimTypes
 
 var builder = WebApplication.CreateBuilder(args);
 
 // =========================================================================
-// 1. GOBERNANZA DE SECRETOS (EVIDENCIA CONTROL 3B.2.5)
+// 1. GOBERNANZA DE SECRETOS (KEY VAULT)
 // =========================================================================
 var keyVaultUrl = builder.Configuration["KeyVault:Url"];
 if (!string.IsNullOrEmpty(keyVaultUrl))
@@ -24,12 +26,30 @@ if (!string.IsNullOrEmpty(keyVaultUrl))
 }
 
 // =========================================================================
-// 2. BASE DE DATOS (LA MEMORIA FINANCIERA)
+// 2. IDENTIDAD Y SEGURIDAD (ESTÁNDAR ZERO TRUST)
+// =========================================================================
+builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
+    .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"))
+    .EnableTokenAcquisitionToCallDownstreamApi(new[] { "User.Read" })
+    .AddMicrosoftGraph()
+    .AddInMemoryTokenCaches();
+
+// 🛡️ EL FIX MAESTRO: Mapeo de Roles para que AuthorizeAsync funcione
+builder.Services.Configure<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme, options =>
+{
+    options.TokenValidationParameters.RoleClaimType = ClaimTypes.Role;
+});
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ITenantContext, TenantContext>();
+
+// =========================================================================
+// 3. BASE DE DATOS (ESTRUCTURA NUCLEAR)
 // =========================================================================
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrEmpty(connectionString))
 {
-    throw new InvalidOperationException("CRÍTICO: ConnectionString 'DefaultConnection' no encontrada.");
+    throw new InvalidOperationException("CRÍTICO: ConnectionString no encontrada.");
 }
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -37,38 +57,15 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     b => b.MigrationsAssembly("Coem.Cmp.Infra")));
 
 // =========================================================================
-// 3. IDENTIDAD Y SEGURIDAD (ESTÁNDAR ZERO TRUST + MICROSOFT GRAPH)
+// 4. POLÍTICAS DE AUTORIZACIÓN (MAPEO DE ROLES)
 // =========================================================================
-builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"))
-    // Solo User.Read para obtener perfil e información del usuario actual
-    .EnableTokenAcquisitionToCallDownstreamApi(new[] { "User.Read" })
-    .AddMicrosoftGraph()
-    .AddInMemoryTokenCaches();
-
-// 🛡️ LÓGICA ZENITH: INYECCIÓN DE CONTEXTO MULTI-TENANT
-// OBLIGATORIO para leer los Claims del usuario en tiempo real en la capa de servicios y DB
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ITenantContext, TenantContext>();
-
-// 🛡️ LÓGICA ZENITH: POLÍTICAS DE AUTORIZACIÓN (LA MATRIZ HECHA CÓDIGO)
 builder.Services.AddAuthorization(options =>
 {
-    // Política: Visibilidad del Costo de Compra (Solo Staff, bloqueado para clientes y soporte base)
-    options.AddPolicy("ViewBaseCosts", policy =>
-        policy.RequireClaim("CmpScope", "Global", "Regional"));
-
-    // Política: Edición Financiera (Exclusivo del rol Operaciones)
-    options.AddPolicy("ManageMarkups", policy =>
-        policy.RequireClaim("CmpPermission", "Markup_Write"));
-
-    // Política: Creación y Configuración de Tenants (Branding, Logos, Asignaciones)
-    options.AddPolicy("TenantSetup", policy =>
-        policy.RequireClaim("CmpPermission", "Tenant_Setup"));
-
-    // Política: Acceso a Consola Técnica (Excluye a roles netamente financieros/comerciales)
-    options.AddPolicy("TechOps", policy =>
-        policy.RequireClaim("CmpRole", "GlobalAdmin", "TAM", "Soporte TI", "ClientAdmin", "ClientITOps"));
+    // Ahora que RoleClaimType está configurado, RequireRole funcionará
+    options.AddPolicy("TenantSetup", policy => policy.RequireRole("GlobalAdmin"));
+    options.AddPolicy("ViewBaseCosts", policy => policy.RequireRole("GlobalAdmin", "Operaciones"));
+    options.AddPolicy("ManageMarkups", policy => policy.RequireRole("GlobalAdmin", "Comercial"));
+    options.AddPolicy("TechOps", policy => policy.RequireRole("GlobalAdmin", "Operaciones", "Soporte TI"));
 });
 
 builder.Services.AddScoped<Coem.Cmp.Web.Security.AdminTenantAuthorizationFilter>();
@@ -83,11 +80,9 @@ builder.Services.AddControllersWithViews(options =>
 });
 
 builder.Services.AddRazorPages().AddMicrosoftIdentityUI();
-
-// OBLIGATORIO para el motor de sincronización asíncrono
 builder.Services.AddHttpClient();
 
-// Protección de Datos y Sesiones Distribuidas
+// Protección de Datos
 var storageConnectionString = builder.Configuration.GetConnectionString("AzureWebJobsStorage");
 if (!string.IsNullOrEmpty(storageConnectionString))
 {
@@ -97,18 +92,16 @@ if (!string.IsNullOrEmpty(storageConnectionString))
 }
 
 // =========================================================================
-// 4. REGISTRO DE MOTORES FINOPS E INTERCEPTORES
+// 5. REGISTRO DE SERVICIOS Y TRANSFORMACIÓN
 // =========================================================================
 builder.Services.AddScoped<IPartnerCenterSyncService, PartnerCenterSyncService>();
 builder.Services.AddScoped<IAzureDirectBillingService, AzureDirectBillingService>();
-
-// El transformador de identidad híbrida
-builder.Services.AddTransient<Microsoft.AspNetCore.Authentication.IClaimsTransformation, ClaimsTransformation>();
+builder.Services.AddScoped<IClaimsTransformation, ClaimsTransformation>();
 
 var app = builder.Build();
 
 // =========================================================================
-// 5. PIPELINE HTTP (Middleware)
+// 6. PIPELINE HTTP
 // =========================================================================
 if (!app.Environment.IsDevelopment())
 {
@@ -134,7 +127,7 @@ app.MapControllerRoute(
 app.MapRazorPages();
 
 // =========================================================================
-// 6. INYECCIÓN DE DATOS INICIALES (SEMILLA DE SEGURIDAD)
+// 7. INICIALIZACIÓN (SEED)
 // =========================================================================
 using (var scope = app.Services.CreateScope())
 {

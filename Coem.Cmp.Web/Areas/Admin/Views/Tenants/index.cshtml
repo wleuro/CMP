@@ -1,7 +1,7 @@
 ﻿@model IEnumerable<Coem.Cmp.Core.Entities.Tenant>
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
-    ViewData["Title"] = "Radar de Clientes - Zenith";
+    ViewData["Title"] = "Radar de Clientes"; // Eliminado término restringido
 
     var countries = ViewBag.Countries as List<string>;
     var currentFilter = ViewBag.CurrentFilter as string;
@@ -10,7 +10,7 @@
 }
 
 <style>
-    /* Estética Zenith: Redondeado Táctico */
+    /* Estética de Alto Nivel: Redondeado Táctico */
     .btn { border-radius: 50rem !important; transition: all 0.3s ease; }
     .kpi-card { border-radius: 1.25rem !important; cursor: pointer; transition: all 0.2s ease; border: 1px solid rgba(0,0,0,0.05) !important; min-height: 85px; }
     .kpi-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important; filter: brightness(1.05); }
@@ -52,13 +52,13 @@
     {
         <div class="alert alert-success alert-dismissible fade show shadow-sm border-0 rounded-4 mb-4 px-4 py-3" role="alert">
             <div class="d-flex align-items-center">
-                <strong class="me-2 text-uppercase">Éxito Zenith:</strong> @TempData["SuccessMessage"]
+                <strong class="me-2 text-uppercase">Éxito Operativo:</strong> @TempData["SuccessMessage"]
             </div>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
 
-    @* KPIs ZENITH: 12 Categorías Estratégicas *@
+    @* KPIs Operativos: 12 Categorías Estratégicas *@
     <div class="row row-cols-2 row-cols-md-4 row-cols-lg-6 g-2 mb-4">
         @* Fila 1 *@
         <div class="col" onclick="toggleCategoryFilter('AP')">
@@ -200,9 +200,10 @@
                                                 _ => "background-color: #FFFFFF; color: black; border: 1px solid #dee2e6;"
                                             };
 
+                                            // CORRECCIÓN: s.OfferName -> s.Name y s.Id -> s.MicrosoftSubscriptionId para el GUID
                                             var subsJson = System.Text.Json.JsonSerializer.Serialize(group.Select(s => new {
-                                                id = s.Id,
-                                                name = s.OfferName,
+                                                id = s.MicrosoftSubscriptionId,
+                                                name = s.Name,
                                                 status = s.Status.ToLower(),
                                                 createdDate = s.CreatedDate.ToString("yyyy-MM-dd"),
                                                 modifiedDate = s.EffectiveDate?.ToString("yyyy-MM-dd") ?? "Sin cambios"
@@ -223,7 +224,7 @@
     </div>
 </div>
 
-@* MODALES DE OPERACIÓN RESTAURADOS *@
+@* MODALES DE OPERACIÓN *@
 
 <div class="modal fade" id="syncIdentitiesModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -254,7 +255,7 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body px-4 py-3">
-                <p class="mb-2"><strong>¡Aviso Zenith!</strong></p>
+                <p class="mb-2"><strong>¡Aviso Crítico!</strong></p>
                 <p class="text-muted">Se realizará un barrido completo de licencias SaaS (M365, Dynamics, BI) y suscripciones Azure para todos los clientes. <br><br><strong>Esto aplicará las nuevas reglas de clasificación a todo el inventario.</strong></p>
             </div>
             <div class="modal-footer border-0 px-4 pb-4">
@@ -281,7 +282,7 @@
                         <thead class="table-light text-uppercase small fw-bold">
                             <tr>
                                 <th class="ps-4">Servicio / Oferta</th>
-                                <th>GUID</th>
+                                <th>GUID (MS)</th>
                                 <th class="text-center">Estado</th>
                                 <th class="text-center">F. Creación</th>
                                 <th class="text-center pe-4">Última Modificación</th>

@@ -1,0 +1,124 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Portal de Gestión</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <style>
+        :root {
+            --sidebar-bg: #1e293b; /* Azul oscuro pizarra de la imagen */
+            --sidebar-hover: #334155;
+            --accent-blue: #3b82f6;
+            --topbar-height: 65px;
+            --sidebar-width: 260px;
+        }
+
+        body { background-color: #f1f5f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+
+        /* Estructura Principal */
+        #wrapper { display: flex; align-items: stretch; }
+
+        /* Sidebar - Identidad Controles Empresariales */
+        #sidebar {
+            min-width: var(--sidebar-width); max-width: var(--sidebar-width);
+            background: var(--sidebar-bg); color: #fff; min-height: 100vh;
+            transition: all 0.3s; z-index: 1000;
+        }
+        .sidebar-header { padding: 1.5rem; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .brand-logo { max-width: 180px; filter: brightness(0) invert(1); } /* Logo Coem en Blanco */
+
+        .nav-item { padding: 0.2rem 1rem; }
+        .nav-link {
+            color: #94a3b8; display: flex; align-items: center;
+            padding: 0.8rem 1rem; border-radius: 8px; transition: 0.2s;
+        }
+        .nav-link:hover, .nav-link.active { color: #fff; background: var(--sidebar-hover); }
+        .nav-link.active { border-left: 4px solid var(--accent-blue); background: rgba(59, 130, 246, 0.1); }
+        .nav-link i { width: 20px; margin-right: 12px; font-size: 1.1rem; }
+
+        /* Contenido y Topbar */
+        #content { width: 100%; }
+        .topbar {
+            height: var(--topbar-height); background: #fff;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        /* Logo del Cliente - Identidad Tenant */
+        .client-brand { display: flex; align-items: center; border-left: 1px solid #e2e8f0; padding-left: 1.5rem; }
+        .client-logo { max-height: 35px; width: auto; }
+
+        .user-profile { display: flex; align-items: center; cursor: pointer; }
+        .user-avatar { width: 35px; height: 35px; border-radius: 50%; background: #e2e8f0; display: flex; align-items: center; justify-content: center; }
+
+        .main-container { padding: 2rem; }
+    </style>
+</head>
+<body>
+
+    <div id="wrapper">
+        <nav id="sidebar">
+            <div class="sidebar-header">
+                <img src="~/images/logo-coem-blanco.png" alt="Controles Empresariales" class="brand-logo" />
+            </div>
+
+            <ul class="nav flex-column mt-3">
+                <li class="nav-item">
+                    <a class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Productivity" ? "active" : "")" href="/Customer/Productivity">
+                        <i class="fas fa-th-large"></i> <span>Licenciamiento</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Consumption" ? "active" : "")" href="/Customer/Consumption">
+                        <i class="fas fa-server"></i> <span>Consumo Azure</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link disabled" href="#">
+                        <i class="fas fa-chart-pie"></i> <span>FinOps (Próximamente)</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link disabled" href="#">
+                        <i class="fas fa-headset"></i> <span>Soporte</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <div id="content">
+            <header class="topbar">
+                <div class="search-placeholder">
+                    <h5 class="mb-0 font-weight-bold text-dark">@ViewData["Title"]</h5>
+                </div>
+
+                <div class="d-flex align-items-center">
+                    <div class="client-brand mr-4">
+                        <img src="~/images/client-logos/default.png" alt="Cliente" class="client-logo" />
+                    </div>
+
+                    <div class="user-profile border-left pl-3">
+                        <div class="text-right mr-3 d-none d-sm-block">
+                            <span class="d-block text-sm font-weight-bold text-dark">@User.Identity?.Name</span>
+                            <small class="text-muted text-xs">Portal de Cliente</small>
+                        </div>
+                        <div class="user-avatar">
+                            <i class="fas fa-user text-slate-400"></i>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <main class="main-container">
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

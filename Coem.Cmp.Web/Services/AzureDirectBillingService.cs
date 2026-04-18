@@ -12,7 +12,7 @@ namespace Coem.Cmp.Web.Services
     public interface IAzureDirectBillingService
     {
         Task<int> SyncDirectSubscriptionsAsync();
-        Task SyncDailyConsumptionAsync(); // Renombrado para mayor claridad semántica
+        Task SyncDailyConsumptionAsync();
     }
 
     public class AzureDirectBillingService : IAzureDirectBillingService
@@ -39,7 +39,6 @@ namespace Coem.Cmp.Web.Services
             _logger = logger;
         }
 
-        // 1. MOTOR DE DESCUBRIMIENTO Y AUDITORÍA
         public async Task<int> SyncDirectSubscriptionsAsync()
         {
             var directConfigs = await _context.AzureDirectCredentials.Where(c => c.IsActive).ToListAsync();
@@ -79,12 +78,12 @@ namespace Coem.Cmp.Web.Services
                         var displayName = item.GetProperty("displayName").GetString() ?? "Unknown";
                         var state = item.GetProperty("state").GetString() ?? "Unknown";
 
-                        // --- PRUEBA ÁCIDA DE PERMISOS ---
+                        // Auditoría de permisos JIT
                         var costPing = await client.GetAsync($"https://management.azure.com/subscriptions/{subIdStr}/providers/Microsoft.Consumption/usageDetails?$top=1&api-version=2023-11-01");
                         var readPing = await client.GetAsync($"https://management.azure.com/subscriptions/{subIdStr}/resources?$top=1&api-version=2021-04-01");
                         var auditStr = $"Cost:{(costPing.IsSuccessStatusCode ? "OK" : "FAIL")}|Read:{(readPing.IsSuccessStatusCode ? "OK" : "FAIL")}";
 
-                        // --- GUARDADO EN EL SILO EXTERNO ---
+                        // Aquí comparamos Guid con Guid (ExternalSubscription.Id sigue siendo Guid)
                         var existingSub = await _context.ExternalSubscriptions.FirstOrDefaultAsync(s => s.Id == subId);
 
                         if (existingSub == null)
@@ -97,7 +96,7 @@ namespace Coem.Cmp.Web.Services
                                 Status = state,
                                 AuditResult = auditStr,
                                 LastSync = DateTime.UtcNow,
-                                Markup = 0.00m // Margen inicial en 0%
+                                Markup = 0.00m
                             });
                         }
                         else
@@ -105,7 +104,6 @@ namespace Coem.Cmp.Web.Services
                             existingSub.AuditResult = auditStr;
                             existingSub.Status = state;
                             existingSub.LastSync = DateTime.UtcNow;
-                            // Ojo: NO sobreescribimos el Markup aquí para no borrar la configuración del TAM
                         }
                         processedCount++;
                     }
@@ -119,12 +117,9 @@ namespace Coem.Cmp.Web.Services
             return processedCount;
         }
 
-        // 2. MOTOR FINANCIERO EN TIEMPO REAL (El "Radar" Operativo)
         public async Task SyncDailyConsumptionAsync()
         {
             var credentials = await _context.AzureDirectCredentials.Where(c => c.IsActive).ToListAsync();
-
-            // Definimos el mes en curso para el backfill operativo
             var today = DateTime.UtcNow;
             var startOfMonth = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
 
@@ -141,16 +136,18 @@ namespace Coem.Cmp.Web.Services
 
                     foreach (var sub in subs)
                     {
-                        // Escudo de colisión: Si la suscripción ya está en Partner Center, priorizamos esa vía
-                        if (await _context.Subscriptions.AnyAsync(s => s.Id == sub.Id)) continue;
+                        // 🛠️ CORRECCIÓN CRÍTICA: Comparamos Guid contra MicrosoftSubscriptionId (int != Guid)
+                        if (await _context.Subscriptions.AnyAsync(s => s.MicrosoftSubscriptionId == sub.Id))
+                        {
+                            _logger.LogInformation($"[DIRECT-ARM] Escudo activado: Suscripción {sub.Id} detectada en canal CSP. Saltando...");
+                            continue;
+                        }
 
                         _logger.LogInformation($"[DIRECT-ARM] Limpiando consumo previo del mes para suscripción: {sub.Id}");
-                        // WIPE AND REPLACE: Borramos el consumo de este mes para inyectar el acumulado fresco
                         await _context.ExternalUsageRecords
                             .Where(r => r.SubscriptionId == sub.Id && r.UsageDate >= startOfMonth)
                             .ExecuteDeleteAsync();
 
-                        // Llamada a la API de Cost Management filtrando desde el inicio del mes
                         var url = $"https://management.azure.com/subscriptions/{sub.Id}/providers/Microsoft.Consumption/usageDetails?metric=AmortizedCost&$filter=properties/usageStart ge '{startOfMonth:yyyy-MM-dd}'&api-version=2023-11-01";
                         var response = await client.GetAsync(url);
 
@@ -171,9 +168,7 @@ namespace Coem.Cmp.Web.Services
                                     var recordDate = !string.IsNullOrEmpty(usageDateStr) ? DateTime.Parse(usageDateStr) : DateTime.UtcNow;
 
                                     var meterCategory = props.TryGetProperty("meterCategory", out var catEl) ? catEl.GetString() ?? "Unknown" : "Unknown";
-                                    var billingCurrency = props.TryGetProperty("billingCurrencyCode", out var curEl) ? catEl.GetString() ?? "USD" : "USD";
-
-                                    decimal calculatedBilledCost = rawCost * (1 + sub.Markup);
+                                    var billingCurrency = props.TryGetProperty("billingCurrencyCode", out var curEl) ? curEl.GetString() ?? "USD" : "USD";
 
                                     recordsBatch.Add(new ExternalUsageRecord
                                     {
@@ -184,7 +179,7 @@ namespace Coem.Cmp.Web.Services
                                         Quantity = props.TryGetProperty("quantity", out var qtyEl) && qtyEl.ValueKind != JsonValueKind.Null ? qtyEl.GetDecimal() : 0m,
                                         EstimatedCost = rawCost,
                                         MarkupPercentage = sub.Markup,
-                                        BilledCost = calculatedBilledCost,
+                                        BilledCost = rawCost * (1 + sub.Markup),
                                         Currency = billingCurrency,
                                         ProviderSource = "BYOT_EA_Direct"
                                     });
@@ -202,12 +197,7 @@ namespace Coem.Cmp.Web.Services
                                     _context.ExternalUsageRecords.AddRange(recordsBatch);
                                     await _context.SaveChangesAsync();
                                 }
-                                _logger.LogInformation($"[DIRECT-ARM] Inyectado consumo del mes para suscripción: {sub.Id}");
                             }
-                        }
-                        else
-                        {
-                            _logger.LogWarning($"[DIRECT-ARM] API Cost Management rechazó la suscripción {sub.Id}. HTTP: {response.StatusCode}");
                         }
                     }
                 }

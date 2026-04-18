@@ -18,12 +18,10 @@ namespace Coem.Cmp.Core.Entities
         [MaxLength(100)]
         public required string DefaultDomain { get; set; }
 
-        // El núcleo de la flexibilidad contractual
         [Required]
         [MaxLength(20)]
-        public string AgreementType { get; set; } = "CSP"; // Valores permitidos: "CSP", "EA", "MCA"
+        public string AgreementType { get; set; } = "CSP"; // "CSP", "EA", "MCA"
 
-        // Para EA, a veces el ID de facturación (Enrollment Number) es diferente al Tenant ID
         [MaxLength(100)]
         public string? BillingAccountId { get; set; }
 
@@ -34,19 +32,16 @@ namespace Coem.Cmp.Core.Entities
         public bool IsActive { get; set; } = true;
         public DateTime OnboardingDate { get; set; } = DateTime.UtcNow;
 
-        // ⚠️ PURGADO: La propiedad CostRecords fue eliminada para evitar Shadow States 
-        // y proteger la memoria RAM. El consumo se consulta directo en los Silos (UsageRecords).
-
-        // ¿Controles Empresariales le cobra el consumo a este cliente?
-        // true = Vas a Partner Center a traer sus costos.
-        // false = Vas por Azure Lighthouse directamente a su suscripción.
+        // Propiedades de facturación y acceso externo
         public bool IsBilledByCoem { get; set; } = true;
-
-        // Si el cliente es externo (IsBilledByCoem = false), necesitas el ID del directorio 
-        // donde vas a inyectar las políticas de Lighthouse.
         public Guid? ExternalDirectoryId { get; set; }
 
-        // LA INYECCIÓN: Relación 1 a N con Subscriptions
+        // RELACIONES
+
+        // Relación con suscripciones de productividad y consumo
         public ICollection<Subscription> Subscriptions { get; set; } = new List<Subscription>();
+
+        // Relación con los perfiles de usuario que tienen acceso a este portal específico
+        public ICollection<UserProfile> UserProfiles { get; set; } = new List<UserProfile>();
     }
 }

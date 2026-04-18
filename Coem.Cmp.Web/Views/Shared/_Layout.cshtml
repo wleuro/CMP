@@ -1,7 +1,16 @@
 @using Microsoft.AspNetCore.Authorization
 @using Coem.Cmp.Core.Interfaces
+@using System.Security.Claims
 @inject IAuthorizationService AuthorizationService
 @inject ITenantContext TenantContext
+
+@{
+    // Extraemos el Rol una sola vez para eficiencia
+    var userRole = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value ?? "Invitado";
+    var isGlobalAdmin = userRole == "GlobalAdmin";
+    var displayName = User.FindFirst("name")?.Value ?? User.Identity?.Name ?? "Usuario";
+    var userInitial = displayName.FirstOrDefault().ToString().ToUpper();
+}
 
 <!DOCTYPE html>
 <html lang="es">
@@ -9,112 +18,167 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - CMP COEM</title>
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    
+    <style>
+        :root {
+            --sidebar-width: 280px;
+            --sidebar-bg: #0f172a;
+            --accent-color: #3b82f6;
+            --admin-gold: #fbbf24;
+            --text-muted: #94a3b8;
+        }
+
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; margin: 0; overflow-x: hidden; }
+
+        .app-wrapper { display: flex; min-height: 100vh; }
+
+        /* Sidebar con jerarquía visual */
+        .sidebar {
+            width: var(--sidebar-width);
+            min-width: var(--sidebar-width);
+            background-color: var(--sidebar-bg);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            z-index: 1000;
+        }
+
+        .sidebar-header { padding: 1.5rem; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .sidebar-menu { flex-grow: 1; overflow-y: auto; padding-top: 1rem; }
+
+        .menu-category {
+            padding: 1.5rem 1.5rem 0.5rem;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .nav-link-custom {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1.5rem;
+            color: #cbd5e1;
+            text-decoration: none;
+            border-left: 4px solid transparent;
+            transition: 0.2s;
+        }
+
+        .nav-link-custom:hover { background: rgba(255,255,255,0.05); color: #fff; }
+        .nav-link-custom.active { background: rgba(59, 130, 246, 0.1); color: #fff; border-left-color: var(--accent-color); }
+        .nav-link-custom i { margin-right: 12px; font-size: 1.1rem; }
+        
+        .nav-link-admin { color: var(--admin-gold) !important; font-weight: 600; }
+        .nav-link-admin:hover { background: rgba(251, 191, 36, 0.1) !important; }
+
+        /* Contenido Principal */
+        .main-content { flex-grow: 1; min-width: 0; padding: 0; display: flex; flex-direction: column; }
+        .content-header { background: #fff; border-bottom: 1px solid #e2e8f0; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+        .content-body { padding: 2rem; flex-grow: 1; }
+
+        .sidebar-footer { background: rgba(0,0,0,0.3); padding: 1.25rem; }
+        .avatar-box { width: 40px; height: 40px; background: var(--accent-color); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+    </style>
 </head>
 <body>
     <div class="app-wrapper">
         <aside class="sidebar shadow-lg">
-            <div class="sidebar-header border-bottom">
-                <img src="~/images/logo-coem.png" alt="COEM" style="max-height: 45px; width: auto;">
-                </div>
+            <div class="sidebar-header">
+                <img src="~/images/logo-coem.png" alt="COEM" style="max-height: 40px; width: auto; filter: brightness(0) invert(1);">
+            </div>
 
-                <div class="p-2 text-center" style="background-color: rgba(255,255,255,0.05); font-size: 0.75rem;">
-                    @if (TenantContext.Scope == "Global")
-                    {
-                        <span class="badge bg-danger w-100">ACCESO GLOBAL</span>
-                    }
-                    else if (TenantContext.Scope == "Regional")
-                    {
-                        <span class="badge bg-primary w-100">REGIÓN: @TenantContext.CurrentCountry</span>
-                    }
-                    else if (TenantContext.Scope == "SingleTenant")
-                    {
-                        <span class="badge bg-success w-100">CLIENTE MODO SEGURO</span>
-                    }
-                </div>
+            @* BADGE DE AUTORIDAD DINÁMICO *@
+            <div class="px-3 mt-3">
+                @if (isGlobalAdmin)
+                {
+                    <div class="badge bg-danger w-100 py-2 shadow-sm" style="font-size: 0.7rem; letter-spacing: 1px;">
+                        <i class="bi bi-shield-fill-check me-1"></i> CONTROL TOTAL GLOBAL
+                    </div>
+                }
+                else
+                {
+                    <div class="badge bg-primary w-100 py-2" style="font-size: 0.7rem;">
+                        <i class="bi bi-geo-alt-fill me-1"></i> REGIÓN: @(TenantContext.CurrentCountry ?? "GENERAL")
+                    </div>
+                }
+            </div>
 
-                <nav class="sidebar-menu mt-3">
-                    <div class="menu-category">Visión General</div>
-                    <a href="/" class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Home" ? "active" : "")">
-                        <i class="bi bi-grid-1x2-fill"></i> Dashboard
+            <nav class="sidebar-menu">
+                <div class="menu-category">Operación Regional</div>
+                <a href="/" class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Home" ? "active" : "")">
+                    <i class="bi bi-speedometer2"></i> Dashboard Maestro
+                </a>
+                
+                @if (isGlobalAdmin)
+                {
+                    <a href="/Admin/Tenants" class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Tenants" ? "active" : "")">
+                        <i class="bi bi-building-fill"></i> Radar de Clientes
                     </a>
+                }
 
-                    @if ((await AuthorizationService.AuthorizeAsync(User, "TenantSetup")).Succeeded)
-                    {
-                        <div class="menu-category mt-3 text-warning">Setup & Habilitación</div>
-                        <a href="/Admin/Users" class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Users" ? "active" : "")">
-                            <i class="bi bi-shield-lock-fill"></i> Identidades Coem
-                        </a>
-                        <a href="/Admin/Tenants" class="nav-link-custom">
-                            <i class="bi bi-building-fill"></i> Organizaciones / Logos
-                        </a>
-                        <a href="/Admin/Countries" class="nav-link-custom">
-                            <i class="bi bi-globe-americas"></i> Preventas / Territorios
-                        </a>
-                        <a href="/Admin/CategoryMappings" class="nav-link-custom">
-                            <i class="bi bi-tags-fill"></i> Categorías Suscripciones
-                        </a>
-                    }
+                @* SECCIÓN DE ADMINISTRACIÓN AVANZADA *@
+                @if (isGlobalAdmin || (await AuthorizationService.AuthorizeAsync(User, "TenantSetup")).Succeeded)
+                {
+                    <div class="menu-category">Setup & Habilitación</div>
+                    <a href="/Admin/Users" class="nav-link-custom nav-link-admin">
+                        <i class="bi bi-people-fill"></i> Identidades Operativas
+                    </a>
+                    <a href="/Admin/CategoryMappings" class="nav-link-custom nav-link-admin">
+                        <i class="bi bi-diagram-3-fill"></i> Mapeo de Categorías
+                    </a>
+                }
 
-                    @if ((await AuthorizationService.AuthorizeAsync(User, "ViewBaseCosts")).Succeeded)
-                    {
-                        <div class="menu-category mt-3">Negocio Coem</div>
-                        <a href="/Admin/Billing" class="nav-link-custom">
-                            <i class="bi bi-graph-up-arrow"></i> Reportes FinOps
-                        </a>
-                    }
+                @if (isGlobalAdmin || (await AuthorizationService.AuthorizeAsync(User, "ViewBaseCosts")).Succeeded)
+                {
+                    <div class="menu-category">Negocio & FinOps</div>
+                    <a href="/Admin/Billing" class="nav-link-custom">
+                        <i class="bi bi-calculator-fill"></i> Reportes de Facturación
+                    </a>
+                    <a href="/Admin/Pricing" class="nav-link-custom">
+                        <i class="bi bi-currency-exchange"></i> Gestión de Markups
+                    </a>
+                }
+            </nav>
 
-                    @if ((await AuthorizationService.AuthorizeAsync(User, "ManageMarkups")).Succeeded)
-                    {
-                        <a href="/Admin/Pricing" class="nav-link-custom text-warning fw-bold">
-                            <i class="bi bi-currency-dollar"></i> Fijación de Markups
-                        </a>
-                    }
-
-                    @if (TenantContext.Scope == "SingleTenant" && TenantContext.Role == "Client Admin")
-                    {
-                        <div class="menu-category mt-3">Mi Empresa</div>
-                        <a href="/Client/Users" class="nav-link-custom">
-                            <i class="bi bi-people-fill"></i> Gestionar mi Equipo
-                        </a>
-                    }
-                </nav>
-
-                <div class="sidebar-footer border-top p-3">
-                    @{
-                        var displayName = User.FindFirst("name")?.Value ?? User.Identity?.Name ?? "Usuario";
-                        var userInitial = displayName.FirstOrDefault().ToString().ToUpper();
-                        var userRole = TenantContext.Role ?? "Invitado";
-                    }
-            
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="avatar-container">
-                            <div class="avatar-initials">
-                                @userInitial
-                            </div>
-                        </div>
-                        <div class="user-info text-truncate">
-                            <div class="fw-bold text-white small" title="@displayName">@displayName</div>
-                            <div class="text-white-50" style="font-size: 0.7rem;">Rol: @userRole</div>
-                        </div>
+            <div class="sidebar-footer border-top border-secondary">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="avatar-box">@userInitial</div>
+                    <div class="user-info text-truncate">
+                        <div class="fw-bold text-white small">@displayName</div>
+                        <div class="text-white-50 small" style="font-size: 0.7rem;">Rol: @userRole</div>
                     </div>
                 </div>
-            </aside>
+            </div>
+        </aside>
 
-            <main class="main-content">
-                <div class="container-fluid">
-                    @RenderBody()
+        <main class="main-content">
+            <header class="content-header">
+                <div class="fw-bold text-uppercase small text-muted">Portal de Gestión de Nube e IA</div>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="badge bg-light text-dark border">@DateTime.Now.ToString("dd MMM yyyy")</span>
+                    <a href="/MicrosoftIdentity/Account/SignOut" class="btn btn-sm btn-outline-danger border-0">
+                        <i class="bi bi-box-arrow-right"></i>
+                    </a>
                 </div>
-            </main>
-        </div>
+            </header>
 
-        <script src="~/lib/jquery/dist/jquery.min.js"></script>
-        <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-        @await RenderSectionAsync("Scripts", required: false)
-    </body>
+            <div class="content-body">
+                @RenderBody()
+            </div>
+        </main>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
 </html>

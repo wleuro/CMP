@@ -5,7 +5,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 using System;
+using System.Linq;
 using System.Threading.Tasks;
+using Coem.Cmp.Core.Entities;
 
 namespace Coem.Cmp.Web.Services
 {
@@ -27,127 +29,75 @@ namespace Coem.Cmp.Web.Services
 
         public async Task<ClaimsPrincipal> TransformAsync(ClaimsPrincipal principal)
         {
-            // 1. Verificación de seguridad base y autenticación
-            if (!(principal.Identity is ClaimsIdentity identity) || !identity.IsAuthenticated)
+            if (principal.Identity == null || !principal.Identity.IsAuthenticated)
             {
                 return principal;
             }
 
-            // 2. Clonamos el Principal para inyectar claims de forma segura (Inmutabilidad)
+            // Clonamos para evitar efectos colaterales en el middleware
             var clone = principal.Clone();
-            var newIdentity = (ClaimsIdentity)clone.Identity!;
+            var identity = (ClaimsIdentity)clone.Identity!;
 
-            var email = principal.Identity.Name; // UPN
-            var nameFromToken = principal.FindFirst("name")?.Value;
+            // 1. Extracción de Identidad (UPN)
+            // Microsoft Entra ID suele enviar el correo en 'preferred_username' o 'name'
+            var upn = principal.FindFirst("preferred_username")?.Value
+                      ?? principal.FindFirst(ClaimTypes.Name)?.Value
+                      ?? principal.Identity.Name;
 
-            // Extraer el TenantId del token de Entra ID (claim estándar 'tid' o el esquema completo)
-            var msTenantIdClaim = principal.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
-                                 ?? principal.FindFirst("tid")?.Value;
-
-            if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(msTenantIdClaim))
-                return principal;
-
-            // 3. LÓGICA DE IDENTIDAD HÍBRIDA (Leída desde Key Vault / Config)
-            var coemTenantId = _config["CmpSettings:CoemTenantId"];
-
-            if (string.IsNullOrEmpty(coemTenantId))
+            if (string.IsNullOrEmpty(upn))
             {
-                _logger.LogCritical("Alerta de Configuración: 'CmpSettings:CoemTenantId' no está configurado en Key Vault/Appsettings.");
+                _logger.LogWarning("No se pudo extraer el UPN del token de identidad.");
+                return principal;
             }
 
-            if (msTenantIdClaim.Equals(coemTenantId, StringComparison.OrdinalIgnoreCase))
+            // 2. Sincronización con la Verdad (Base de Datos Nuclear)
+            // CRÍTICO: Usamos .IgnoreQueryFilters() porque si no, el filtro Multi-tenant 
+            // nos oculta el perfil del usuario antes de saber quién es.
+            var profile = await _context.UserProfiles
+                .Include(u => u.Role)
+                .Include(u => u.Tenant)
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(u => u.Upn.ToLower() == upn.ToLower());
+
+            if (profile != null && profile.IsActive)
             {
-                // ES STAFF DE COEM: Asignamos Global por defecto (Se ajustará en el Paso 4 si es necesario)
-                newIdentity.AddClaim(new Claim(ClaimTypes.Role, "CoemStaff"));
-                newIdentity.AddClaim(new Claim("CmpScope", "Global"));
-                _logger.LogDebug($"Usuario STAFF detectado: {email}");
+                // Inyectamos el Rol con el esquema estándar de Microsoft
+                if (profile.Role != null)
+                {
+                    var roleName = profile.Role.Name.Replace(" ", ""); // GlobalAdmin
+
+                    // Sello de Autoridad oficial
+                    identity.AddClaim(new Claim(ClaimTypes.Role, roleName));
+                    identity.AddClaim(new Claim("CmpRole", roleName));
+
+                    // 3. Definición de Alcance (Scope)
+                    // Si es Admin Global, le damos las llaves del reino
+                    if (roleName == "GlobalAdmin")
+                    {
+                        identity.AddClaim(new Claim("CmpScope", "Global"));
+                        // Un Admin Global no está atado a un solo Tenant para las consultas
+                    }
+                    else if (profile.TenantId.HasValue)
+                    {
+                        identity.AddClaim(new Claim("CmpTenantId", profile.TenantId.Value.ToString()));
+                        identity.AddClaim(new Claim("CmpScope", "SingleTenant"));
+                    }
+                }
+
+                // 4. Metadata de Usuario
+                if (!identity.HasClaim(c => c.Type == "CmpCountry"))
+                {
+                    var country = profile.Country ?? profile.Tenant?.Country ?? "Colombia";
+                    identity.AddClaim(new Claim("CmpCountry", country));
+                }
             }
             else
             {
-                // ES UN CLIENTE: Validamos existencia en nuestra base de datos
-                var msTenantIdGuid = Guid.Parse(msTenantIdClaim);
-                var tenant = await _context.Tenants
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(t => t.MicrosoftTenantId == msTenantIdGuid);
-
-                if (tenant != null)
-                {
-                    // Cliente reconocido y activo
-                    newIdentity.AddClaim(new Claim(ClaimTypes.Role, "Customer"));
-                    newIdentity.AddClaim(new Claim("CmpTenantId", tenant.Id.ToString()));
-                    newIdentity.AddClaim(new Claim("CmpScope", "SingleTenant"));
-                    _logger.LogDebug($"Usuario CLIENTE detectado para Tenant: {tenant.Name}");
-                }
-                else
-                {
-                    // Tenant no registrado o contrato inactivo
-                    newIdentity.AddClaim(new Claim(ClaimTypes.Role, "Guest"));
-                    _logger.LogWarning($"Intento de acceso de Tenant no registrado: {msTenantIdClaim}");
-                }
+                _logger.LogWarning("Usuario {Upn} autenticado pero no encontrado en UserProfiles.", upn);
+                identity.AddClaim(new Claim("CmpScope", "Guest"));
             }
-
-            // 4. SINCRONIZACIÓN JIT Y AJUSTE DE ROLES INTERNOS
-            await SynchronizeInternalProfile(newIdentity, email, nameFromToken);
 
             return clone;
-        }
-
-        private async Task SynchronizeInternalProfile(ClaimsIdentity newIdentity, string email, string? nameFromToken)
-        {
-            var profile = await _context.UserProfiles
-                .Include(u => u.Role)
-                .FirstOrDefaultAsync(u => u.Upn == email);
-
-            if (profile != null)
-            {
-                // Sincronización de DisplayName si cambió en Entra ID
-                if (!string.IsNullOrEmpty(nameFromToken) && profile.DisplayName != nameFromToken)
-                {
-                    profile.DisplayName = nameFromToken;
-                    await _context.SaveChangesAsync();
-                }
-
-                if (profile.Role != null)
-                {
-                    // 🛡️ ZENITH: Inyectamos el Rol estándar y el CmpRole Normalizado (sin espacios) para las Policies
-                    newIdentity.AddClaim(new Claim(ClaimTypes.Role, profile.Role.Name));
-                    newIdentity.AddClaim(new Claim("CmpRole", profile.Role.Name.Replace(" ", "")));
-
-                    // 🛡️ ZENITH: PODER ABSOLUTO PARA GLOBAL ADMIN
-                    if (profile.Role.Name == "Global Admin" || profile.Role.Name == "GlobalAdmin")
-                    {
-                        newIdentity.AddClaim(new Claim("CmpPermission", "Markup_Write"));
-                        newIdentity.AddClaim(new Claim("CmpPermission", "Tenant_Setup"));
-                        // El scope ya es 'Global' por el paso 3
-                    }
-
-                    // 🛡️ ZENITH: PERMISOS ESPECÍFICOS PARA OPERACIONES
-                    if (profile.Role.Name == "Operaciones")
-                    {
-                        newIdentity.AddClaim(new Claim("CmpPermission", "Markup_Write"));
-                        newIdentity.AddClaim(new Claim("CmpPermission", "Tenant_Setup"));
-                    }
-
-                    // 🛡️ ZENITH: FILTRO TERRITORIAL PARA COMERCIALES
-                    if (profile.Role.Name == "Comercial")
-                    {
-                        // Removemos el acceso global que se le dio en el Paso 3
-                        var scopeClaim = newIdentity.FindFirst("CmpScope");
-                        if (scopeClaim != null)
-                        {
-                            newIdentity.RemoveClaim(scopeClaim);
-                        }
-
-                        // Asignamos el alcance regional y su país específico
-                        newIdentity.AddClaim(new Claim("CmpScope", "Regional"));
-
-                        if (!string.IsNullOrEmpty(profile.Country))
-                        {
-                            newIdentity.AddClaim(new Claim("CmpCountry", profile.Country));
-                        }
-                    }
-                }
-            }
         }
     }
 }

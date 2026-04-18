@@ -8,8 +8,6 @@ namespace Coem.Cmp.Infra.Data
     {
         private readonly ITenantContext? _tenantContext;
 
-        // Inyectamos el contexto de identidad. 
-        // Lo hacemos opcional (null) para que el Worker o las Migraciones (que no tienen usuario web) no fallen.
         public ApplicationDbContext(
             DbContextOptions<ApplicationDbContext> options,
             ITenantContext? tenantContext = null)
@@ -18,8 +16,6 @@ namespace Coem.Cmp.Infra.Data
             _tenantContext = tenantContext;
         }
 
-        // Propiedades de evaluación segura: EF Core las lee en tiempo real para armar el SQL.
-        // Si no hay contexto (Worker), asumimos "Global" para que el proceso corra sin bloqueos.
         public string CurrentScope => _tenantContext?.Scope ?? "Global";
         public int? CurrentTenantId => _tenantContext?.CurrentTenantId;
         public string? CurrentCountry => _tenantContext?.CurrentCountry;
@@ -43,10 +39,9 @@ namespace Coem.Cmp.Infra.Data
         public DbSet<Permission> Permissions { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
-        // --- GEstion de categorias ---
-        public DbSet<CategoryDefinition> CategoryDefinitions { get; set; }
 
-        // --- Categorias De Productos CSP --- 
+        // --- GESTIÓN DE CATEGORÍAS ---
+        public DbSet<CategoryDefinition> CategoryDefinitions { get; set; }
         public DbSet<CategoryMapping> CategoryMappings { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -54,7 +49,7 @@ namespace Coem.Cmp.Infra.Data
             base.OnModelCreating(modelBuilder);
 
             // ====================================================================
-            // 🛡️ LÓGICA ZENITH: GLOBAL QUERY FILTERS (AISLAMIENTO DE DATOS)
+            // LÓGICA DE AISLAMIENTO: GLOBAL QUERY FILTERS
             // ====================================================================
 
             modelBuilder.Entity<Tenant>().HasQueryFilter(t =>
@@ -67,6 +62,12 @@ namespace Coem.Cmp.Infra.Data
                 CurrentScope == "Global" ||
                 (CurrentScope == "Regional" && s.Tenant != null && s.Tenant.Country == CurrentCountry) ||
                 (CurrentScope == "SingleTenant" && s.TenantId == CurrentTenantId)
+            );
+
+            modelBuilder.Entity<UserProfile>().HasQueryFilter(u =>
+                CurrentScope == "Global" ||
+                (CurrentScope == "Regional" && u.Tenant != null && u.Tenant.Country == CurrentCountry) ||
+                (CurrentScope == "SingleTenant" && u.TenantId == CurrentTenantId)
             );
 
             modelBuilder.Entity<ExternalSubscription>().HasQueryFilter(e =>
@@ -82,60 +83,57 @@ namespace Coem.Cmp.Infra.Data
             );
 
             // ====================================================================
-            // CONFIGURACIONES EXISTENTES (MANTENIDAS INTACTAS)
+            // CONFIGURACIONES DE ENTIDADES
             // ====================================================================
 
-            // 1. TENANTS: Unicidad para evitar duplicados de identidad
-            modelBuilder.Entity<Tenant>()
-                .HasIndex(t => t.MicrosoftTenantId)
-                .IsUnique();
+            // 1. TENANTS: Unicidad y Navegación
+            modelBuilder.Entity<Tenant>(entity =>
+            {
+                entity.HasIndex(t => t.MicrosoftTenantId).IsUnique();
 
-            // 2. SUBSCRIPTIONS (CSP NATIVO)
+                // Relación con Usuarios (configurada desde el otro lado)
+            });
+
+            // 2. SUBSCRIPTIONS
             modelBuilder.Entity<Subscription>(entity =>
             {
                 entity.HasIndex(s => s.Id);
                 entity.Property(s => s.Markup).HasPrecision(5, 4);
             });
 
-            // 2.5. COST RECORDS (REGISTROS DE COSTOS CSP)
+            // 3. COST RECORDS
             modelBuilder.Entity<CostRecord>(entity =>
             {
                 entity.HasKey(c => c.Id);
-                
-                // Configuración de precisión financiera
                 entity.Property(c => c.ProviderCost).HasPrecision(18, 4);
                 entity.Property(c => c.RetailAmount).HasPrecision(18, 4);
-                
-                // Relación con Tenant
+
                 entity.HasOne(c => c.Tenant)
                       .WithMany()
                       .OnDelete(DeleteBehavior.Restrict);
-                
-                // Índice para consultas frecuentes
+
                 entity.HasIndex(c => new { c.TenantId, c.UsageDate });
             });
 
-            // 3. EXTERNAL SUBSCRIPTIONS (BYOT)
-            modelBuilder.Entity<ExternalSubscription>(entity =>
+            // 4. IDENTIDADES (UserProfile)
+            modelBuilder.Entity<UserProfile>(entity =>
             {
-                entity.HasKey(e => e.Id);
+                entity.HasKey(u => u.Id);
+                entity.HasIndex(u => u.Upn).IsUnique();
 
-                entity.HasOne(e => e.Credential)
-                      .WithMany()
-                      .HasForeignKey(e => e.AzureDirectCredentialId)
-                      .OnDelete(DeleteBehavior.Cascade);
+                // Navegación bidireccional con Tenant para autogestión
+                entity.HasOne(u => u.Tenant)
+                      .WithMany(t => t.UserProfiles)
+                      .HasForeignKey(u => u.TenantId)
+                      .OnDelete(DeleteBehavior.Restrict);
 
-                entity.HasIndex(e => e.AzureDirectCredentialId);
-                entity.Property(e => e.Markup).HasPrecision(5, 4);
+                entity.HasOne(u => u.Role)
+                      .WithMany(r => r.Users)
+                      .HasForeignKey(u => u.RoleId)
+                      .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // 4. AZURE DIRECT CREDENTIALS (BYOT)
-            modelBuilder.Entity<AzureDirectCredential>()
-                .HasIndex(a => a.TenantId);
-
-            // --- CONFIGURACIÓN DE SEGURIDAD ---
-
-            // Llave compuesta para la tabla transaccional de Permisos
+            // 5. SEGURIDAD (RBAC)
             modelBuilder.Entity<RolePermission>(entity =>
             {
                 entity.HasKey(rp => new { rp.RoleId, rp.PermissionId });
@@ -149,40 +147,15 @@ namespace Coem.Cmp.Infra.Data
                       .HasForeignKey(rp => rp.PermissionId);
             });
 
-            // 5. IDENTIDADES (UserProfile consolidado)
-            modelBuilder.Entity<UserProfile>(entity =>
-            {
-                entity.HasKey(u => u.Id);
-
-                // Unicidad Absoluta de Identidad
-                entity.HasIndex(u => u.Upn).IsUnique();
-
-                // Aislamiento Multi-Tenant (Protección de Datos)
-                entity.HasOne(u => u.Tenant)
-                      .WithMany()
-                      .HasForeignKey(u => u.TenantId)
-                      .OnDelete(DeleteBehavior.Restrict);
-
-                // Relación con Rol - Configuración explícita
-                entity.HasOne(u => u.Role)
-                      .WithMany(r => r.Users)
-                      .HasForeignKey(u => u.RoleId)
-                      .OnDelete(DeleteBehavior.Restrict);
-            });
-
-            // 6. SILOS DE CONSUMO (Aplica a PC y BYOT)
+            // 6. SILOS DE CONSUMO
             ConfigureUsageSilo<PCUsageRecord>(modelBuilder);
             ConfigureUsageSilo<ExternalUsageRecord>(modelBuilder);
         }
 
-        /// <summary>
-        /// Aplica las reglas estrictas de FinOps y Aislamiento a cualquier tabla de consumo
-        /// </summary>
         private void ConfigureUsageSilo<T>(ModelBuilder modelBuilder) where T : UsageRecordBase
         {
             modelBuilder.Entity<T>(entity =>
             {
-                // 🛡️ ZENITH: Filtro Global aplicado dinámicamente a tablas de consumo masivo
                 entity.HasQueryFilter(e =>
                     CurrentScope == "Global" ||
                     (CurrentScope == "Regional" && e.Tenant != null && e.Tenant.Country == CurrentCountry) ||
@@ -190,22 +163,14 @@ namespace Coem.Cmp.Infra.Data
                 );
 
                 entity.HasKey(e => e.Id);
-
-                // --- 1. EL ÍNDICE DIOS (Covering Index) ---
                 entity.HasIndex(e => new { e.TenantId, e.UsageDate, e.SubscriptionId })
                       .IncludeProperties(e => new { e.BilledCost, e.EstimatedCost, e.ResourceName, e.ChargeType });
 
-                // --- 2. ÍNDICES FINOPS ---
-                entity.HasIndex(e => e.FinOpsEnvironment);
-                entity.HasIndex(e => e.FinOpsCostCenter);
-
-                // --- 3. AISLAMIENTO MULTI-TENANT ---
                 entity.HasOne(e => e.Tenant)
                       .WithMany()
                       .HasForeignKey(e => e.TenantId)
                       .OnDelete(DeleteBehavior.Restrict);
 
-                // --- 4. PRECISIÓN FINANCIERA ---
                 entity.Property(e => e.Quantity).HasPrecision(18, 4);
                 entity.Property(e => e.EstimatedCost).HasPrecision(18, 4);
                 entity.Property(e => e.BilledCost).HasPrecision(18, 4);

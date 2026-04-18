@@ -43,7 +43,7 @@ namespace Coem.Cmp.Web.Services
             _logger = logger;
         }
 
-        // --- 1. SINCRONIZACIÓN DE CLIENTES ---
+        // --- 1. SINCRONIZACIÓN DE CLIENTES (TENANTS) ---
         public async Task<int> SyncCustomersAsync()
         {
             var regionalConfigs = await _context.PartnerCenterCredentials.Where(c => c.IsActive).ToListAsync();
@@ -105,7 +105,7 @@ namespace Coem.Cmp.Web.Services
             return totalSynced;
         }
 
-        // --- 2. MODULO SaaS: LICENCIAS CON CLASIFICACIÓN DINÁMICA ---
+        // --- 2. MODULO SaaS: LICENCIAS ---
         public async Task<int> SyncSaaSSubscriptionsAsync()
         {
             var regionalConfigs = await _context.PartnerCenterCredentials.Where(c => c.IsActive).ToListAsync();
@@ -121,7 +121,6 @@ namespace Coem.Cmp.Web.Services
                     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
                     var tenants = await _context.Tenants.Where(t => t.Country == config.CountryName).ToListAsync();
-                    _logger.LogInformation($"[SaaS] Procesando licencias para {tenants.Count} clientes en {config.CountryName}...");
 
                     foreach (var tenant in tenants)
                     {
@@ -137,17 +136,15 @@ namespace Coem.Cmp.Web.Services
 
                         foreach (var item in items.EnumerateArray())
                         {
-                            // FILTRO: Solo traemos suscripciones basadas en licencias (M365, Copilot, etc)
                             var billingType = item.TryGetProperty("billingType", out var bt) ? bt.GetString() : "";
                             if (billingType != "license") continue;
 
                             var offerName = item.GetProperty("offerName").GetString() ?? "";
                             var offerId = item.GetProperty("offerId").GetString() ?? "";
-                            var subId = Guid.Parse(item.GetProperty("id").GetString()!);
+                            var msSubId = Guid.Parse(item.GetProperty("id").GetString()!);
                             int quantity = item.TryGetProperty("quantity", out var q) ? q.GetInt32() : 0;
                             string status = item.GetProperty("status").GetString() ?? "Unknown";
 
-                            // Clasificación dinámica desde tu motor de reglas
                             string categoryTag = "SaaS";
                             foreach (var rule in categoryRules)
                             {
@@ -159,25 +156,25 @@ namespace Coem.Cmp.Web.Services
                                 }
                             }
 
-                            var existingSub = await _context.Subscriptions.FirstOrDefaultAsync(s => s.Id == subId);
+                            // CORRECCIÓN: Buscamos por MicrosoftSubscriptionId, no por la PK Id (int)
+                            var existingSub = await _context.Subscriptions
+                                .FirstOrDefaultAsync(s => s.MicrosoftSubscriptionId == msSubId);
 
                             if (existingSub != null)
                             {
-                                // REVISIÓN ZENITH: Actualizamos TODO, incluyendo Quantity y Category
                                 existingSub.Status = status;
-                                existingSub.OfferName = offerName;
+                                existingSub.Name = offerName; // Mapeo: OfferName -> Name
                                 existingSub.Quantity = quantity;
                                 existingSub.Category = categoryTag;
-                                existingSub.IsAzureWorkload = false;
                             }
                             else
                             {
                                 _context.Subscriptions.Add(new Subscription
                                 {
-                                    Id = subId,
+                                    MicrosoftSubscriptionId = msSubId, // Guardamos el Guid de Microsoft
                                     TenantId = tenant.Id,
                                     OfferId = offerId,
-                                    OfferName = offerName,
+                                    Name = offerName, // Mapeo: OfferName -> Name
                                     Category = categoryTag,
                                     CreatedDate = DateTime.UtcNow,
                                     Status = status,
@@ -227,27 +224,31 @@ namespace Coem.Cmp.Web.Services
                             var offerName = item.GetProperty("offerName").GetString() ?? "Unknown";
                             if (!offerName.Contains("Azure Plan", StringComparison.OrdinalIgnoreCase)) continue;
 
-                            var subId = Guid.Parse(item.GetProperty("id").GetString()!);
+                            var msSubId = Guid.Parse(item.GetProperty("id").GetString()!);
                             string categoryTag = "AL";
                             foreach (var rule in categoryRules)
                             {
                                 if (offerName.Contains(rule.Keyword, StringComparison.OrdinalIgnoreCase)) { categoryTag = rule.CategoryCode; break; }
                             }
 
-                            var existingSub = await _context.Subscriptions.FirstOrDefaultAsync(s => s.Id == subId);
+                            // CORRECCIÓN: Lookup por Guid de Microsoft
+                            var existingSub = await _context.Subscriptions
+                                .FirstOrDefaultAsync(s => s.MicrosoftSubscriptionId == msSubId);
+
                             if (existingSub != null)
                             {
                                 existingSub.Status = item.GetProperty("status").GetString() ?? existingSub.Status;
+                                existingSub.Name = offerName;
                                 existingSub.Category = categoryTag;
                             }
                             else
                             {
                                 _context.Subscriptions.Add(new Subscription
                                 {
-                                    Id = subId,
+                                    MicrosoftSubscriptionId = msSubId,
                                     TenantId = tenant.Id,
                                     OfferId = item.GetProperty("offerId").GetString() ?? "Unknown",
-                                    OfferName = offerName,
+                                    Name = offerName,
                                     Category = categoryTag,
                                     CreatedDate = DateTime.UtcNow,
                                     Status = item.GetProperty("status").GetString() ?? "Active",
@@ -306,7 +307,7 @@ namespace Coem.Cmp.Web.Services
             }
         }
 
-        // --- 5. RADAR CSP OPERATIVO (Cost Management Bypass) ---
+        // --- 5. RADAR CSP OPERATIVO ---
         public async Task SyncCspOperationalConsumptionAsync()
         {
             var regionalConfigs = await _context.PartnerCenterCredentials.Where(c => c.IsActive).ToListAsync();
@@ -367,7 +368,7 @@ namespace Coem.Cmp.Web.Services
 
         private async Task ProcessManifestFiles(JsonElement statusData, PartnerCenterCredential config, string billingPeriod)
         {
-            // Mantenemos la lógica de descarga e inyección de Graph (NCE)
+            // Implementación interna de procesamiento de archivos manifest
         }
 
         private IConfidentialClientApplication BuildMsalApp(PartnerCenterCredential config)

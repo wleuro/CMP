@@ -1,0 +1,110 @@
+﻿@using Coem.Cmp.Core.Entities
+@model IEnumerable<Subscription>
+
+@{
+    ViewData["Title"] = "Portal de Productividad";
+    Layout = "_Layout"; 
+}
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800 font-weight-bold">Suscripciones de Productividad</h1>
+            <p class="text-muted small">Control centralizado de licenciamiento SaaS y servicios de colaboración.</p>
+        </div>
+        @if (ViewBag.TotalPages > 1)
+        {
+            <div class="badge bg-white shadow-sm border text-primary px-3 py-2" style="border-radius: 8px;">
+                <i class="fas fa-layer-group mr-1"></i> Página @ViewBag.CurrentPage de @ViewBag.TotalPages
+            </div>
+        }
+    </div>
+
+    @if (!Model.Any())
+    {
+        <div class="card shadow-sm border-0 text-center py-5" style="border-radius: 15px;">
+            <div class="card-body">
+                <div class="mb-3">
+                    <i class="fas fa-search fa-3x text-light"></i>
+                </div>
+                <h5 class="text-dark font-weight-bold">Sin suscripciones registradas</h5>
+                <p class="text-muted">No hemos detectado licencias activas de productividad para su tenant en este ciclo.</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            @foreach (var item in Model)
+            {
+                <div class="col-xl-4 col-lg-6 mb-4">
+                    <div class="card border-0 shadow-sm h-100 card-hover" style="border-radius: 12px; border-left: 5px solid #4e73df !important;">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="p-2 bg-light rounded">
+                                    <i class="fas fa-microsoft text-primary"></i>
+                                </div>
+                                <span class="badge @(item.IsActive ? "bg-success-soft text-success" : "bg-warning-soft text-warning") px-3">
+                                    @(item.IsActive ? "Activa" : item.Status)
+                                </span>
+                            </div>
+                            
+                            <h6 class="font-weight-bold text-gray-900 mb-1">@item.Name</h6>
+                            <p class="text-xs text-uppercase text-muted tracking-wider mb-3">ID: @item.OfferId</p>
+
+                            <div class="d-flex align-items-center justify-content-between bg-light p-2 rounded">
+                                <div>
+                                    <span class="text-xs d-block text-muted">Asignadas</span>
+                                    <span class="h5 font-weight-bold mb-0 text-dark">@item.Quantity</span>
+                                </div>
+                                <div class="text-right">
+                                    <span class="text-xs d-block text-muted">Ciclo</span>
+                                    <span class="font-weight-bold text-dark">@(item.BillingCycle ?? "N/A")</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-transparent border-0 pt-0 pb-3">
+                            <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-light btn-block font-weight-bold text-primary">
+                                Gestionar detalles <i class="fas fa-arrow-right ml-1" style="font-size: 0.7rem;"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (ViewBag.TotalPages > 1)
+        {
+            <nav aria-label="Navegación" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item @(ViewBag.HasPreviousPage ? "" : "disabled")">
+                        <a class="page-link border-0 shadow-sm mx-1 rounded" asp-action="Index" asp-route-page="@(ViewBag.CurrentPage - 1)">
+                            <i class="fas fa-chevron-left"></i>
+                        </a>
+                    </li>
+
+                    @for (int i = 1; i <= ViewBag.TotalPages; i++)
+                    {
+                        <li class="page-item @(i == ViewBag.CurrentPage ? "active" : "")">
+                            <a class="page-link border-0 shadow-sm mx-1 rounded @(i == ViewBag.CurrentPage ? "bg-primary text-white" : "text-primary")" 
+                               asp-action="Index" asp-route-page="@i">@i</a>
+                        </li>
+                    }
+
+                    <li class="page-item @(ViewBag.HasNextPage ? "" : "disabled")">
+                        <a class="page-link border-0 shadow-sm mx-1 rounded" asp-action="Index" asp-route-page="@(ViewBag.CurrentPage + 1)">
+                            <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        }
+    }
+</div>
+
+<style>
+    .card-hover:hover { transform: translateY(-3px); transition: all 0.3s ease; }
+    .bg-success-soft { background-color: #eafaf1; }
+    .bg-warning-soft { background-color: #fef9e7; }
+    .tracking-wider { letter-spacing: 0.05em; }
+</style>
