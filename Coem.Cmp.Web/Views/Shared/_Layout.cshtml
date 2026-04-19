@@ -5,11 +5,9 @@
 @inject ITenantContext TenantContext
 
 @{
-    // Extraemos el Rol una sola vez para eficiencia
     var userRole = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value ?? "Invitado";
     var isGlobalAdmin = userRole == "GlobalAdmin";
     var displayName = User.FindFirst("name")?.Value ?? User.Identity?.Name ?? "Usuario";
-    var userInitial = displayName.FirstOrDefault().ToString().ToUpper();
 }
 
 <!DOCTYPE html>
@@ -33,14 +31,25 @@
             --text-muted: #94a3b8;
         }
 
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; margin: 0; overflow-x: hidden; }
+        /* RESET ESTRUCTURAL */
+        html, body { height: 100%; margin: 0; padding: 0; overflow-x: hidden; }
 
-        .app-wrapper { display: flex; min-height: 100vh; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
 
-        /* Sidebar con jerarquía visual */
+        /* Contenedor Maestro: No-Wrap Innegociable */
+        .app-wrapper { 
+            display: flex; 
+            flex-direction: row;
+            flex-wrap: nowrap;
+            min-height: 100vh; 
+            width: 100%;
+        }
+
+        /* Sidebar Táctico */
         .sidebar {
             width: var(--sidebar-width);
             min-width: var(--sidebar-width);
+            max-width: var(--sidebar-width);
             background-color: var(--sidebar-bg);
             color: #fff;
             display: flex;
@@ -80,13 +89,19 @@
         .nav-link-admin { color: var(--admin-gold) !important; font-weight: 600; }
         .nav-link-admin:hover { background: rgba(251, 191, 36, 0.1) !important; }
 
-        /* Contenido Principal */
-        .main-content { flex-grow: 1; min-width: 0; padding: 0; display: flex; flex-direction: column; }
+        /* Contenido Principal: El Fix */
+        .main-content { 
+            flex-grow: 1; 
+            flex-shrink: 1;
+            min-width: 0; /* ESTO evita que el contenido empuje el sidebar abajo */
+            display: flex; 
+            flex-direction: column; 
+        }
+
         .content-header { background: #fff; border-bottom: 1px solid #e2e8f0; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
         .content-body { padding: 2rem; flex-grow: 1; }
 
-        .sidebar-footer { background: rgba(0,0,0,0.3); padding: 1.25rem; }
-        .avatar-box { width: 40px; height: 40px; background: var(--accent-color); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        .sidebar-footer { background: rgba(0,0,0,0.3); padding: 1.25rem; margin-top: auto; }
     </style>
 </head>
 <body>
@@ -96,7 +111,6 @@
                 <img src="~/images/logo-coem.png" alt="COEM" style="max-height: 40px; width: auto; filter: brightness(0) invert(1);">
             </div>
 
-            @* BADGE DE AUTORIDAD DINÁMICO *@
             <div class="px-3 mt-3">
                 @if (isGlobalAdmin)
                 {
@@ -115,25 +129,30 @@
             <nav class="sidebar-menu">
                 <div class="menu-category">Operación Regional</div>
                 <a href="/" class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Home" ? "active" : "")">
-                    <i class="bi bi-speedometer2"></i> Dashboard Maestro
+                    <i class="bi bi-speedometer2"></i> Dashboard
                 </a>
                 
                 @if (isGlobalAdmin)
                 {
                     <a href="/Admin/Tenants" class="nav-link-custom @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Tenants" ? "active" : "")">
-                        <i class="bi bi-building-fill"></i> Radar de Clientes
+                        <i class="bi bi-building-fill"></i> Clientes
                     </a>
                 }
 
-                @* SECCIÓN DE ADMINISTRACIÓN AVANZADA *@
                 @if (isGlobalAdmin || (await AuthorizationService.AuthorizeAsync(User, "TenantSetup")).Succeeded)
                 {
                     <div class="menu-category">Setup & Habilitación</div>
                     <a href="/Admin/Users" class="nav-link-custom nav-link-admin">
-                        <i class="bi bi-people-fill"></i> Identidades Operativas
+                        <i class="bi bi-people-fill"></i> Identidades
                     </a>
                     <a href="/Admin/CategoryMappings" class="nav-link-custom nav-link-admin">
                         <i class="bi bi-diagram-3-fill"></i> Mapeo de Categorías
+                    </a>
+                    <a href="/Admin/Countries" class="nav-link-custom nav-link-admin">
+                        <i class="bi bi-suitcase-lg-fill"></i> Conexion Partner Center
+                    </a>
+                    <a href="/Admin/ExternalTenants" class="nav-link-custom nav-link-admin">
+                        <i class="bi bi-server"></i> Conexion Externos
                     </a>
                 }
 
@@ -150,19 +169,13 @@
             </nav>
 
             <div class="sidebar-footer border-top border-secondary">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="avatar-box">@userInitial</div>
-                    <div class="user-info text-truncate">
-                        <div class="fw-bold text-white small">@displayName</div>
-                        <div class="text-white-50 small" style="font-size: 0.7rem;">Rol: @userRole</div>
-                    </div>
-                </div>
+                @await Component.InvokeAsync("UserProfile")
             </div>
         </aside>
 
         <main class="main-content">
             <header class="content-header">
-                <div class="fw-bold text-uppercase small text-muted">Portal de Gestión de Nube e IA</div>
+                <div class="fw-bold text-uppercase small text-muted">Portal de Gestión de Nube (CMP By COEM)</div>
                 <div class="d-flex align-items-center gap-3">
                     <span class="badge bg-light text-dark border">@DateTime.Now.ToString("dd MMM yyyy")</span>
                     <a href="/MicrosoftIdentity/Account/SignOut" class="btn btn-sm btn-outline-danger border-0">
@@ -172,7 +185,9 @@
             </header>
 
             <div class="content-body">
-                @RenderBody()
+                <div class="container-fluid">
+                    @RenderBody()
+                </div>
             </div>
         </main>
     </div>

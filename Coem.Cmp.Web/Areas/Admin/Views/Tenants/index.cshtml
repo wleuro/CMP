@@ -87,14 +87,14 @@
             </div>
         </div>
         <div class="col" onclick="toggleCategoryFilter('TELEFONIA')">
-            <div class="card shadow-sm h-100 border-0 kpi-card @(categoryFilter == "TELEFONIA" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))" style="background-color: #10B981; color: white;">
+            <div class="card shadow-sm h-100 border-0 kpi-card @(categoryFilter == "TEL" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))" style="background-color: #10B981; color: white;">
                 <div class="card-body p-2 text-center"><small class="fw-bold d-block mb-1">TELEFONÍA</small><h3 class="fw-bold mb-0">@ViewBag.TotalTelefonia</h3></div>
             </div>
         </div>
         
         @* Fila 2 *@
         <div class="col" onclick="toggleCategoryFilter('DYNAMICS')">
-            <div class="card shadow-sm h-100 border-0 kpi-card @(categoryFilter == "DYNAMICS" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))" style="background-color: #E3008C; color: white;">
+            <div class="card shadow-sm h-100 border-0 kpi-card @(categoryFilter == "DYN" ? "" : (categoryFilter != null ? "kpi-inactive" : ""))" style="background-color: #E3008C; color: white;">
                 <div class="card-body p-2 text-center"><small class="fw-bold d-block mb-1">DYNAMICS</small><h3 class="fw-bold mb-0">@ViewBag.TotalDynamics</h3></div>
             </div>
         </div>

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
@@ -17,108 +18,96 @@ namespace Coem.Cmp.Web.Areas.Admin.Controllers
     public class UsersController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly IConfiguration _config;
 
-        public UsersController(ApplicationDbContext context)
+        public UsersController(ApplicationDbContext context, IConfiguration config)
         {
             _context = context;
+            _config = config;
+        }
+
+        private async Task<int?> GetCoemTenantIdAsync()
+        {
+            var coemMsId = _config["CmpSettings:CoemTenantId"];
+            if (Guid.TryParse(coemMsId, out var coemGuid))
+            {
+                var tenant = await _context.Tenants
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(t => t.MicrosoftTenantId == coemGuid);
+                return tenant?.Id;
+            }
+            return null;
         }
 
         [HttpGet]
         public async Task<IActionResult> Index()
         {
-            // 🛡️ ZENITH: Ignoramos filtros para que el Administrador vea el panorama completo
+            var coemId = await GetCoemTenantIdAsync();
+
+            // 🛡️ ACCESO RADAR: Solo personal vinculado a COEM o staff raíz
             var usersQuery = await _context.UserProfiles
                 .IgnoreQueryFilters()
                 .Include(u => u.Role)
                 .Include(u => u.Tenant)
+                .Where(u => u.TenantId == coemId || u.TenantId == null)
                 .OrderBy(u => u.Upn)
                 .ToListAsync();
 
-            // Mapeo manual y seguro. Si Id es int, se pasa a int. Si es Guid, a Guid.
-            // Según tu esquema, UserProfile.Id es int.
             var viewModels = usersQuery.Select(u => new UserListViewModel
             {
-                Id = u.Id, // Asegúrate que en UserListViewModel 'Id' sea el mismo tipo que en UserProfile
+                Id = u.Id,
                 Email = u.Upn,
                 DisplayName = u.DisplayName ?? "Pendiente",
                 RoleName = u.Role?.Name ?? "Sin Rol",
-                TenantName = u.Tenant?.Name ?? "Coem / Global",
+                TenantName = u.Tenant?.Name ?? "Staff Corporativo",
                 IsActive = u.IsActive,
                 RoleId = u.RoleId,
                 TenantId = u.TenantId ?? 0
             }).ToList();
 
+            await PopulateDropdownsAsync(); // VITAL para los modales en la misma vista
             return View(viewModels);
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> Create()
-        {
-            await PopulateDropdownsAsync();
-            return View(new UserCreateViewModel { Upn = string.Empty });
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(UserCreateViewModel model)
         {
-            // 🛡️ CORRECCIÓN DE TIPOS: Si Role.Id es int, model.RoleId debe ser int.
-            // Si Copilot te puso un ToString() aquí, arruinó el rendimiento de la consulta.
-            var role = await _context.Roles.IgnoreQueryFilters()
-                .FirstOrDefaultAsync(r => r.Id == model.RoleId);
-
-            if (role != null)
-            {
-                // Purga de lógica regional y de cliente
-                if (!role.Name.Contains("Comercial")) model.Country = null;
-                if (!role.Name.Contains("Client")) model.TenantId = null;
-
-                if (role.Name.Contains("Comercial") && string.IsNullOrEmpty(model.Country))
-                    ModelState.AddModelError("Country", "Asigna un país para este perfil comercial.");
-
-                if (role.Name.Contains("Client") && !model.TenantId.HasValue)
-                    ModelState.AddModelError("TenantId", "Selecciona una organización para este cliente.");
-            }
+            var coemId = await GetCoemTenantIdAsync();
 
             if (ModelState.IsValid)
             {
                 var cleanUpn = model.Upn.Trim().ToLower();
 
-                // Validación de duplicados real (en toda la DB)
                 bool exists = await _context.UserProfiles.IgnoreQueryFilters().AnyAsync(u => u.Upn == cleanUpn);
                 if (exists)
                 {
-                    ModelState.AddModelError("Upn", "Esta identidad ya existe.");
-                    await PopulateDropdownsAsync();
-                    return View(model);
+                    ModelState.AddModelError("Upn", "Esta identidad ya está registrada.");
+                    return RedirectToAction(nameof(Index)); // Evitamos errores de estado en modales
                 }
-
-                var displayName = cleanUpn.Split('@')[0];
 
                 var newUser = new UserProfile
                 {
                     Upn = cleanUpn,
-                    DisplayName = displayName,
+                    DisplayName = cleanUpn.Split('@')[0],
                     RoleId = model.RoleId,
                     Country = model.Country,
-                    TenantId = (model.TenantId == 0) ? null : model.TenantId,
+                    TenantId = coemId, // Inyección automática de COEM
                     IsActive = true
                 };
 
                 _context.UserProfiles.Add(newUser);
                 await _context.SaveChangesAsync();
 
-                TempData["Success"] = $"Identidad {newUser.Upn} creada.";
-                return RedirectToAction(nameof(Index));
+                TempData["Success"] = $"Identidad {newUser.Upn} autorizada.";
             }
 
-            await PopulateDropdownsAsync();
-            return View(model);
+            return RedirectToAction(nameof(Index));
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ToggleStatus(int id) // ⚠️ Cambiado a int para coincidir con UserProfile.Id
+        public async Task<IActionResult> ToggleStatus(int id)
         {
             var user = await _context.UserProfiles.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == id);
             if (user == null) return NotFound();
@@ -126,15 +115,30 @@ namespace Coem.Cmp.Web.Areas.Admin.Controllers
             user.IsActive = !user.IsActive;
             await _context.SaveChangesAsync();
 
-            TempData["Success"] = $"Estado de {user.Upn} actualizado.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // 🛡️ ACCIÓN DE ELIMINACIÓN: Para limpiar la bóveda
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var user = await _context.UserProfiles.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == id);
+            if (user == null) return NotFound();
+
+            _context.UserProfiles.Remove(user);
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = "Identidad purgada del sistema.";
             return RedirectToAction(nameof(Index));
         }
 
         private async Task PopulateDropdownsAsync()
         {
-            // 🛡️ ZENITH: IgnoreQueryFilters() es la única forma de que el modal no salga vacío
+            // Solo roles corporativos
             var roles = await _context.Roles
                 .IgnoreQueryFilters()
+                .Where(r => !r.Name.Contains("Client"))
                 .OrderBy(r => r.Name)
                 .ToListAsync();
 
@@ -144,14 +148,8 @@ namespace Coem.Cmp.Web.Areas.Admin.Controllers
                 Text = r.Name
             }).ToList();
 
-            var tenants = await _context.Tenants
-                .IgnoreQueryFilters()
-                .OrderBy(t => t.Name)
-                .ToListAsync();
-
-            ViewBag.Tenants = new SelectList(tenants, "Id", "Name");
-
-            ViewBag.Countries = new SelectList(new List<string> { "Colombia", "Ecuador", "Perú", "Panamá", "Regional" });
+            ViewBag.Countries = new List<string> { "Colombia", "Ecuador", "Perú", "Panamá", "Regional" }
+                .Select(c => new SelectListItem { Value = c, Text = c }).ToList();
         }
     }
 }
