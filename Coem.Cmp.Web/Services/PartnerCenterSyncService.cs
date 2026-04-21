@@ -139,11 +139,11 @@ namespace Coem.Cmp.Web.Services
                             var billingType = item.TryGetProperty("billingType", out var bt) ? bt.GetString() : "";
                             if (billingType != "license") continue;
 
-                            var offerName = item.GetProperty("offerName").GetString() ?? "";
-                            var offerId = item.GetProperty("offerId").GetString() ?? "";
+                            var offerName = item.TryGetProperty("offerName", out var on) ? on.GetString() ?? "" : "";
+                            var offerId = item.TryGetProperty("offerId", out var oi) ? oi.GetString() ?? "" : "";
                             var msSubId = Guid.Parse(item.GetProperty("id").GetString()!);
                             int quantity = item.TryGetProperty("quantity", out var q) ? q.GetInt32() : 0;
-                            string status = item.GetProperty("status").GetString() ?? "Unknown";
+                            string status = item.TryGetProperty("status", out var s) ? s.GetString() ?? "Unknown" : "Unknown";
 
                             string categoryTag = "SaaS";
                             foreach (var rule in categoryRules)
@@ -156,14 +156,13 @@ namespace Coem.Cmp.Web.Services
                                 }
                             }
 
-                            // CORRECCIÓN: Buscamos por MicrosoftSubscriptionId, no por la PK Id (int)
                             var existingSub = await _context.Subscriptions
-                                .FirstOrDefaultAsync(s => s.MicrosoftSubscriptionId == msSubId);
+                                .FirstOrDefaultAsync(sub => sub.MicrosoftSubscriptionId == msSubId);
 
                             if (existingSub != null)
                             {
                                 existingSub.Status = status;
-                                existingSub.Name = offerName; // Mapeo: OfferName -> Name
+                                existingSub.Name = offerName;
                                 existingSub.Quantity = quantity;
                                 existingSub.Category = categoryTag;
                             }
@@ -171,10 +170,10 @@ namespace Coem.Cmp.Web.Services
                             {
                                 _context.Subscriptions.Add(new Subscription
                                 {
-                                    MicrosoftSubscriptionId = msSubId, // Guardamos el Guid de Microsoft
+                                    MicrosoftSubscriptionId = msSubId,
                                     TenantId = tenant.Id,
                                     OfferId = offerId,
-                                    Name = offerName, // Mapeo: OfferName -> Name
+                                    Name = offerName,
                                     Category = categoryTag,
                                     CreatedDate = DateTime.UtcNow,
                                     Status = status,
@@ -221,7 +220,7 @@ namespace Coem.Cmp.Web.Services
 
                         foreach (var item in items.EnumerateArray())
                         {
-                            var offerName = item.GetProperty("offerName").GetString() ?? "Unknown";
+                            var offerName = item.TryGetProperty("offerName", out var on) ? on.GetString() ?? "Unknown" : "Unknown";
                             if (!offerName.Contains("Azure Plan", StringComparison.OrdinalIgnoreCase)) continue;
 
                             var msSubId = Guid.Parse(item.GetProperty("id").GetString()!);
@@ -231,13 +230,14 @@ namespace Coem.Cmp.Web.Services
                                 if (offerName.Contains(rule.Keyword, StringComparison.OrdinalIgnoreCase)) { categoryTag = rule.CategoryCode; break; }
                             }
 
-                            // CORRECCIÓN: Lookup por Guid de Microsoft
                             var existingSub = await _context.Subscriptions
                                 .FirstOrDefaultAsync(s => s.MicrosoftSubscriptionId == msSubId);
 
+                            string status = item.TryGetProperty("status", out var st) ? st.GetString() ?? "Active" : "Active";
+
                             if (existingSub != null)
                             {
-                                existingSub.Status = item.GetProperty("status").GetString() ?? existingSub.Status;
+                                existingSub.Status = status;
                                 existingSub.Name = offerName;
                                 existingSub.Category = categoryTag;
                             }
@@ -247,11 +247,11 @@ namespace Coem.Cmp.Web.Services
                                 {
                                     MicrosoftSubscriptionId = msSubId,
                                     TenantId = tenant.Id,
-                                    OfferId = item.GetProperty("offerId").GetString() ?? "Unknown",
+                                    OfferId = item.TryGetProperty("offerId", out var oi) ? oi.GetString() ?? "Unknown" : "Unknown",
                                     Name = offerName,
                                     Category = categoryTag,
                                     CreatedDate = DateTime.UtcNow,
-                                    Status = item.GetProperty("status").GetString() ?? "Active",
+                                    Status = status,
                                     IsAzureWorkload = true,
                                     Markup = 0.00m
                                 });
@@ -307,7 +307,7 @@ namespace Coem.Cmp.Web.Services
             }
         }
 
-        // --- 5. RADAR CSP OPERATIVO ---
+        // --- 5. RADAR CSP OPERATIVO (BLINDADO Y RESILIENTE) ---
         public async Task SyncCspOperationalConsumptionAsync()
         {
             var regionalConfigs = await _context.PartnerCenterCredentials.Where(c => c.IsActive).ToListAsync();
@@ -326,7 +326,9 @@ namespace Coem.Cmp.Web.Services
                     var baDoc = JsonDocument.Parse(await baResponse.Content.ReadAsStringAsync());
                     if (!baDoc.RootElement.TryGetProperty("value", out var baArray) || baArray.GetArrayLength() == 0) continue;
 
-                    string billingAccountId = baArray[0].GetProperty("name").GetString() ?? "";
+                    string billingAccountId = baArray[0].TryGetProperty("name", out var bn) ? bn.GetString() ?? "" : "";
+                    if (string.IsNullOrEmpty(billingAccountId)) continue;
+
                     var tenants = await _context.Tenants.Where(t => t.Country == config.CountryName).ToListAsync();
 
                     foreach (var tenant in tenants)
@@ -336,30 +338,88 @@ namespace Coem.Cmp.Web.Services
 
                         await _context.PCUsageRecords.Where(r => r.TenantId == tenant.Id && r.UsageDate >= startOfMonth && r.ProviderSource == "CostManagement_Operational").ExecuteDeleteAsync();
 
-                        var usageResponse = await client.GetAsync($"https://management.azure.com/providers/Microsoft.Billing/billingAccounts/{billingAccountId}/customers/{tenant.MicrosoftTenantId}/providers/Microsoft.Consumption/usageDetails?metric=AmortizedCost&$filter=properties/usageStart ge '{startOfMonth:yyyy-MM-dd}'&api-version=2023-11-01");
-                        if (!usageResponse.IsSuccessStatusCode) continue;
+                        string requestUrl = $"https://management.azure.com/providers/Microsoft.Billing/billingAccounts/{billingAccountId}/customers/{tenant.MicrosoftTenantId}/providers/Microsoft.Consumption/usageDetails?metric=AmortizedCost&$filter=properties/usageStart ge '{startOfMonth:yyyy-MM-dd}'&api-version=2023-11-01";
+                        HttpResponseMessage usageResponse = null;
+                        int maxRetries = 3;
 
-                        var records = JsonDocument.Parse(await usageResponse.Content.ReadAsStringAsync()).RootElement.GetProperty("value");
+                        // ESTRATEGIA EXPONENTIAL BACKOFF
+                        for (int attempt = 1; attempt <= maxRetries; attempt++)
+                        {
+                            usageResponse = await client.GetAsync(requestUrl);
+
+                            if (usageResponse.IsSuccessStatusCode) break;
+
+                            if ((int)usageResponse.StatusCode == 429)
+                            {
+                                var delay = usageResponse.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(Math.Pow(2, attempt) * 5);
+                                _logger.LogWarning($"[THROTTLING 429] Límite de API para Tenant {tenant.MicrosoftTenantId}. Pausando {delay.TotalSeconds}s (Intento {attempt}/{maxRetries}).");
+                                await Task.Delay(delay);
+                                continue;
+                            }
+
+                            break;
+                        }
+
+                        if (usageResponse == null || !usageResponse.IsSuccessStatusCode)
+                        {
+                            _logger.LogWarning($"[SKIP] Omitiendo consumo para Tenant {tenant.MicrosoftTenantId} tras fallos o sin permisos.");
+                            continue;
+                        }
+
+                        var responseContent = await usageResponse.Content.ReadAsStringAsync();
+                        var parsedDoc = JsonDocument.Parse(responseContent);
+
+                        if (!parsedDoc.RootElement.TryGetProperty("value", out var records)) continue;
+
                         var batch = new List<PCUsageRecord>();
 
                         foreach (var record in records.EnumerateArray())
                         {
-                            var props = record.GetProperty("properties");
+                            if (!record.TryGetProperty("properties", out var props)) continue;
+
+                            // 1. Extracción táctica
+                            var subGuidStr = props.TryGetProperty("subscriptionGuid", out var sg) ? sg.GetString() :
+                                             (props.TryGetProperty("subscriptionId", out var si) ? si.GetString() : null);
+
+                            // 2. Limpieza de basura de Azure ARM
+                            if (!string.IsNullOrEmpty(subGuidStr) && subGuidStr.Contains("/subscriptions/"))
+                            {
+                                subGuidStr = subGuidStr.Replace("/subscriptions/", "").Split('/')[0];
+                            }
+
+                            // 3. Parseo y Radar de diagnóstico
+                            if (!Guid.TryParse(subGuidStr, out Guid currentSubId))
+                            {
+                                string availableKeys = string.Join(", ", props.EnumerateObject().Select(p => p.Name));
+                                _logger.LogWarning($"[ALERTA DE ESQUEMA] No se pudo extraer el GUID. Valor recibido: '{subGuidStr ?? "NULL"}'. Nodos disponibles: {availableKeys}");
+                            }
+
                             batch.Add(new PCUsageRecord
                             {
                                 TenantId = tenant.Id,
-                                UsageDate = DateTime.Parse(props.GetProperty("usageStart").GetString()!),
-                                ProductName = props.GetProperty("product").GetString() ?? "Unknown",
-                                MeterCategory = props.GetProperty("meterCategory").GetString() ?? "N/A",
-                                Quantity = props.GetProperty("quantity").GetDecimal(),
-                                EstimatedCost = props.GetProperty("costInBillingCurrency").GetDecimal(),
-                                BilledCost = props.GetProperty("costInBillingCurrency").GetDecimal(),
-                                Currency = props.GetProperty("billingCurrencyCode").GetString() ?? "USD",
+                                SubscriptionId = currentSubId, // Asignación limpia a la base
+                                UsageDate = props.TryGetProperty("usageStart", out var us) && us.ValueKind == JsonValueKind.String ? DateTime.Parse(us.GetString()!) : startOfMonth,
+                                ProductName = props.TryGetProperty("product", out var p) ? p.GetString() ?? "Unknown" : "Unknown",
+                                MeterCategory = props.TryGetProperty("meterCategory", out var m) ? m.GetString() ?? "N/A" : "N/A",
+                                Quantity = props.TryGetProperty("quantity", out var q) && q.ValueKind == JsonValueKind.Number ? q.GetDecimal() : 0m,
+                                EstimatedCost = props.TryGetProperty("costInBillingCurrency", out var ec) && ec.ValueKind == JsonValueKind.Number ? ec.GetDecimal() : 0m,
+                                BilledCost = props.TryGetProperty("costInBillingCurrency", out var bc) && bc.ValueKind == JsonValueKind.Number ? bc.GetDecimal() : 0m,
+                                Currency = props.TryGetProperty("billingCurrencyCode", out var cur) ? cur.GetString() ?? "USD" : "USD",
                                 ProviderSource = "CostManagement_Operational"
                             });
-                            if (batch.Count >= 1000) { _context.PCUsageRecords.AddRange(batch); await _context.SaveChangesAsync(); batch.Clear(); }
+
+                            if (batch.Count >= 1000)
+                            {
+                                _context.PCUsageRecords.AddRange(batch);
+                                await _context.SaveChangesAsync();
+                                batch.Clear();
+                            }
                         }
-                        if (batch.Any()) { _context.PCUsageRecords.AddRange(batch); await _context.SaveChangesAsync(); }
+                        if (batch.Any())
+                        {
+                            _context.PCUsageRecords.AddRange(batch);
+                            await _context.SaveChangesAsync();
+                        }
                     }
                 }
                 catch (Exception ex) { _logger.LogError($"[ERROR RADAR CSP] {config.CountryName}: {ex.Message}"); }
@@ -368,7 +428,7 @@ namespace Coem.Cmp.Web.Services
 
         private async Task ProcessManifestFiles(JsonElement statusData, PartnerCenterCredential config, string billingPeriod)
         {
-            // Implementación interna de procesamiento de archivos manifest
+            await Task.CompletedTask;
         }
 
         private IConfidentialClientApplication BuildMsalApp(PartnerCenterCredential config)

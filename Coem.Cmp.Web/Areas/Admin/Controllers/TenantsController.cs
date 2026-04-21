@@ -62,10 +62,10 @@ namespace Coem.Cmp.Web.Areas.Admin.Controllers
             ViewBag.TotalAP = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "AP"));
             ViewBag.TotalM365 = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "M365"));
             ViewBag.TotalAI = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "AI"));
-            ViewBag.TotalSeguridad = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "SEGURIDAD"));
+            ViewBag.TotalSeguridad = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "SEG"));
             ViewBag.TotalPowerPlatform = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "POWERPLATFORM"));
-            ViewBag.TotalTelefonia = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "TELEFONIA"));
-            ViewBag.TotalDynamics = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "DYNAMICS"));
+            ViewBag.TotalTelefonia = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "TEL"));
+            ViewBag.TotalDynamics = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "DYN"));
             ViewBag.TotalBI = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "BI"));
 
             ViewBag.TotalInfra = allFiltered.Count(t => t.Subscriptions.Any(s => s.Category == "INFRA"));

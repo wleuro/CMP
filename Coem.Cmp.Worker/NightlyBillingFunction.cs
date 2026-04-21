@@ -25,56 +25,67 @@ namespace Coem.Cmp.Worker
         [Function("SyncDailyUsage")]
         public async Task Run([TimerTrigger("0 0 2 * * *")] TimerInfo myTimer)
         {
-            _logger.LogInformation($"[ORQUESTADOR HÍBRIDO ZENITH] Iniciando ciclo de ejecución: {DateTime.UtcNow} UTC");
+            // TÁCTICA DE BYPASS: Cambia a 'true' solo cuando quieras sincronizar TODO (Tenants, SaaS, etc.)
+            // Para tus pruebas actuales de consumo, mantenlo en 'false'.
+            bool ejecutarCicloCompleto = false;
 
+            _logger.LogInformation($"[ORQUESTADOR COEM] Modo {(ejecutarCicloCompleto ? "FULL" : "SÓLO CONSUMO")}. Inicio: {DateTime.UtcNow} UTC");
+
+            if (ejecutarCicloCompleto)
+            {
+                // FASE 1: INFRAESTRUCTURA DE CLIENTES
+                try
+                {
+                    _logger.LogInformation("Fase 1: Sincronizando metadatos de clientes CSP...");
+                    await _pcSyncService.SyncCustomersAsync();
+                }
+                catch (Exception ex) { _logger.LogError($"[FALLO FASE 1] {ex.Message}"); }
+
+                // FASE 1.5: MÓDULO SaaS
+                try
+                {
+                    _logger.LogInformation("Fase 1.5: Extrayendo inventario de licencias SaaS...");
+                    await _pcSyncService.SyncSaaSSubscriptionsAsync();
+                }
+                catch (Exception ex) { _logger.LogError($"[FALLO FASE 1.5] {ex.Message}"); }
+
+                // FASE 2: SUSCRIPCIONES Y NCE
+                try
+                {
+                    _logger.LogInformation("Fase 2: Sincronizando suscripciones y facturación oficial...");
+                    await _pcSyncService.SyncSubscriptionsAsync();
+                    await _pcSyncService.SyncNightlyUsageAsync("current");
+                }
+                catch (Exception ex) { _logger.LogError($"[FALLO FASE 2] {ex.Message}"); }
+            }
+
+            // ==========================================================
+            // FASE 2.5: CONSUMO OPERATIVO CSP (OBJETIVO ACTUAL)
+            // ==========================================================
             try
             {
-                // ==========================================================
-                // FASE 1: INFRAESTRUCTURA DE CLIENTES
-                // ==========================================================
-                _logger.LogInformation("Fase 1: Sincronizando metadatos de clientes CSP...");
-                await _pcSyncService.SyncCustomersAsync();
-
-                // ==========================================================
-                // FASE 1.5: MÓDULO SaaS (M365, Copilot, Dynamics)
-                // ==========================================================
-                _logger.LogInformation("Fase 1.5: Extrayendo inventario de licencias SaaS...");
-                // Este motor es vital para el flujo de caja recurrente de Coem
-                await _pcSyncService.SyncSaaSSubscriptionsAsync();
-
-                // ==========================================================
-                // FASE 2: CONSUMO AZURE - VÍA FINANCIERA (Graph API)
-                // ==========================================================
-                _logger.LogInformation("Fase 2: Sincronizando suscripciones Azure y facturación oficial...");
-                await _pcSyncService.SyncSubscriptionsAsync();
-
-                // Intento de descarga de archivos NCE. Maneja el 'limbo' de inicio de mes automáticamente.
-                await _pcSyncService.SyncNightlyUsageAsync("current");
-
-                // ==========================================================
-                // FASE 2.5: CONSUMO AZURE - VÍA OPERATIVA (Radar CSP)
-                // ==========================================================
-                _logger.LogInformation("Fase 2.5: Extrayendo consumo en tiempo real (Torniquete CSP)...");
-                // Esta fase salva la visibilidad durante el cierre de Microsoft
+                _logger.LogInformation("Fase 2.5: Extrayendo consumo operativo (Torniquete CSP)...");
                 await _pcSyncService.SyncCspOperationalConsumptionAsync();
-
-                // ==========================================================
-                // FASE 3 y 4: ENTORNOS EXTERNOS / BYOT (Azure Direct)
-                // ==========================================================
-                _logger.LogInformation("Fase 3: Sincronizando metadatos de entornos directos...");
-                await _azureDirectService.SyncDirectSubscriptionsAsync();
-
-                _logger.LogInformation("Fase 4: Extrayendo consumo operativo de entornos externos...");
-                await _azureDirectService.SyncDailyConsumptionAsync();
-
-                _logger.LogInformation("[ORQUESTADOR HÍBRIDO] Ciclo completado con éxito.");
             }
             catch (Exception ex)
             {
-                _logger.LogError($"[FALLO CRÍTICO] El orquestador se detuvo: {ex.Message}");
-                // Re-lanzamos para que Azure Functions registre el reintento o la falla en el portal
-                throw;
+                _logger.LogError($"[FALLO CRÍTICO CONSUMO] Error en radar operativo: {ex.Message}");
             }
+
+            if (ejecutarCicloCompleto)
+            {
+                // FASE 3 y 4: ENTORNOS EXTERNOS (DIRECT)
+                try
+                {
+                    _logger.LogInformation("Fase 3: Sincronizando metadatos directos...");
+                    await _azureDirectService.SyncDirectSubscriptionsAsync();
+                    _logger.LogInformation("Fase 4: Extrayendo consumo operativo externo...");
+                    await _azureDirectService.SyncDailyConsumptionAsync();
+                }
+                catch (Exception ex) { _logger.LogError($"[FALLO FASE 3/4] {ex.Message}"); }
+            }
+
+            _logger.LogInformation("[ORQUESTADOR COEM] Ciclo finalizado.");
         }
     }
 }
