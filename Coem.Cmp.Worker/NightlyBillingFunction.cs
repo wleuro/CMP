@@ -27,7 +27,7 @@ namespace Coem.Cmp.Worker
         {
             // TÁCTICA DE BYPASS: Cambia a 'true' solo cuando quieras sincronizar TODO (Tenants, SaaS, etc.)
             // Para tus pruebas actuales de consumo, mantenlo en 'false'.
-            bool ejecutarCicloCompleto = false;
+            bool ejecutarCicloCompleto = true;
 
             _logger.LogInformation($"[ORQUESTADOR COEM] Modo {(ejecutarCicloCompleto ? "FULL" : "SÓLO CONSUMO")}. Inicio: {DateTime.UtcNow} UTC");
 
