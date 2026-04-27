@@ -20,7 +20,8 @@ namespace Coem.Cmp.Web.Services
         Task<int> SyncCustomersAsync();
         Task<int> SyncSubscriptionsAsync();
         Task SyncNightlyUsageAsync(string? billingPeriod = "current");
-        Task SyncCspOperationalConsumptionAsync();
+        // Interfaz actualizada para soportar ventana de tiempo dinámica
+        Task SyncCspOperationalConsumptionAsync(int daysBack = 7);
         Task<int> SyncSaaSSubscriptionsAsync();
     }
 
@@ -307,11 +308,13 @@ namespace Coem.Cmp.Web.Services
             }
         }
 
-        // --- 5. RADAR CSP OPERATIVO (BLINDADO Y RESILIENTE) ---
-        public async Task SyncCspOperationalConsumptionAsync()
+        // --- 5. RADAR CSP OPERATIVO (BLINDADO Y DINÁMICO) ---
+        public async Task SyncCspOperationalConsumptionAsync(int daysBack = 7)
         {
             var regionalConfigs = await _context.PartnerCenterCredentials.Where(c => c.IsActive).ToListAsync();
-            var startOfMonth = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+            // Ventana dinámica de extracción para recuperar el gap de datos
+            var targetStartDate = DateTime.UtcNow.AddDays(-daysBack).Date;
 
             foreach (var config in regionalConfigs)
             {
@@ -336,9 +339,12 @@ namespace Coem.Cmp.Web.Services
                         var loopAuth = await app.AcquireTokenForClient(new[] { "https://management.azure.com/.default" }).ExecuteAsync();
                         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", loopAuth.AccessToken);
 
-                        await _context.PCUsageRecords.Where(r => r.TenantId == tenant.Id && r.UsageDate >= startOfMonth && r.ProviderSource == "CostManagement_Operational").ExecuteDeleteAsync();
+                        // Borrado idempotente inteligente: solo limpia la ventana que vamos a procesar
+                        await _context.PCUsageRecords
+                            .Where(r => r.TenantId == tenant.Id && r.UsageDate >= targetStartDate && r.ProviderSource == "CostManagement_Operational")
+                            .ExecuteDeleteAsync();
 
-                        string requestUrl = $"https://management.azure.com/providers/Microsoft.Billing/billingAccounts/{billingAccountId}/customers/{tenant.MicrosoftTenantId}/providers/Microsoft.Consumption/usageDetails?metric=AmortizedCost&$filter=properties/usageStart ge '{startOfMonth:yyyy-MM-dd}'&api-version=2023-11-01";
+                        string requestUrl = $"https://management.azure.com/providers/Microsoft.Billing/billingAccounts/{billingAccountId}/customers/{tenant.MicrosoftTenantId}/providers/Microsoft.Consumption/usageDetails?metric=AmortizedCost&$filter=properties/usageStart ge '{targetStartDate:yyyy-MM-dd}'&api-version=2023-11-01";
                         HttpResponseMessage usageResponse = null;
                         int maxRetries = 3;
 
@@ -397,8 +403,9 @@ namespace Coem.Cmp.Web.Services
                             batch.Add(new PCUsageRecord
                             {
                                 TenantId = tenant.Id,
-                                SubscriptionId = currentSubId, // Asignación limpia a la base
-                                UsageDate = props.TryGetProperty("usageStart", out var us) && us.ValueKind == JsonValueKind.String ? DateTime.Parse(us.GetString()!) : startOfMonth,
+                                SubscriptionId = currentSubId,
+                                // Asigna la fecha reportada o cae en el fallback de la ventana configurada
+                                UsageDate = props.TryGetProperty("usageStart", out var us) && us.ValueKind == JsonValueKind.String ? DateTime.Parse(us.GetString()!) : targetStartDate,
                                 ProductName = props.TryGetProperty("product", out var p) ? p.GetString() ?? "Unknown" : "Unknown",
                                 MeterCategory = props.TryGetProperty("meterCategory", out var m) ? m.GetString() ?? "N/A" : "N/A",
                                 Quantity = props.TryGetProperty("quantity", out var q) && q.ValueKind == JsonValueKind.Number ? q.GetDecimal() : 0m,
